@@ -57,3 +57,30 @@ export const syncEvents = sqliteTable("sync_events", {
   summary: text("summary").notNull(),
   createdAt: text("created_at").notNull(),
 });
+
+export const telegramLinks = sqliteTable("telegram_links", {
+  userId: text("user_id").primaryKey(),
+  chatId: text("chat_id").notNull().unique(),
+  telegramUserId: text("telegram_user_id").notNull(),
+  telegramUsername: text("telegram_username").notNull().default(""),
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+  linkedAt: text("linked_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const telegramLinkCodes = sqliteTable("telegram_link_codes", {
+  codeHash: text("code_hash").primaryKey(),
+  userId: text("user_id").notNull(),
+  expiresAt: text("expires_at").notNull(),
+  usedAt: text("used_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+});
+
+export const telegramEvents = sqliteTable("telegram_events", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  direction: text("direction").notNull(),
+  status: text("status").notNull(),
+  summary: text("summary").notNull(),
+  createdAt: text("created_at").notNull(),
+});

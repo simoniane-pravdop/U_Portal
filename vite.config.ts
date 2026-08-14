@@ -17,6 +17,8 @@ const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 const localBindingConfig = {
   main: "./worker/index.ts",
   compatibility_flags: ["nodejs_compat"],
+  vars: isCloudflareDeployment ? { PORTAL_BASE_URL: "https://pravdop-management-portal.simonian-e-be8.workers.dev" } : {},
+  triggers: { crons: ["0 7 * * *"] },
   d1_databases: d1
     ? [
         {

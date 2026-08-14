@@ -27,10 +27,12 @@ export async function POST(request: Request) {
       if (!body.taskGid) return jsonError("Не вказано GID задачі Asana", 400);
       result = await asanaRequest(
         user.id,
-        `/tasks/${encodeURIComponent(body.taskGid)}?opt_fields=name,completed,due_on,start_on,assignee.name,permalink_url,modified_at,notes`,
+        `/tasks/${encodeURIComponent(body.taskGid)}?opt_fields=name,completed,due_on,start_on,assignee.name,assignee.email,permalink_url,modified_at,notes`,
       );
     } else if (body.action === "create") {
       if (!body.projectGid) return jsonError("Не вказано проєкт Asana", 400);
+      const db = await database();
+      const connection = db ? await db.prepare("SELECT asana_user_gid FROM asana_connections WHERE user_id = ?").bind(user.id).first<{ asana_user_gid: string }>() : null;
       result = await asanaRequest(user.id, "/tasks", {
         method: "POST",
         body: JSON.stringify({
@@ -39,21 +41,21 @@ export async function POST(request: Request) {
             notes: body.description || `${node.code}\n\n${node.result}\n\nКритерій приймання: ${node.acceptanceCriteria}`,
             projects: [body.projectGid],
             due_on: body.dueOn || node.plannedEnd || undefined,
+            assignee: connection?.asana_user_gid || undefined,
           },
         }),
       });
     } else {
       if (!body.taskGid) return jsonError("Не вказано GID задачі Asana", 400);
+      const data: Record<string, unknown> = {};
+      if (node.asana.rules.title === "portal") data.name = body.title;
+      if (node.asana.rules.description === "portal") data.notes = body.description;
+      if (node.asana.rules.dates === "portal") data.due_on = body.dueOn || null;
+      if (node.asana.rules.status === "portal") data.completed = body.completed;
+      if (!Object.keys(data).length) return jsonError("Жодне поле не визначено для передання з порталу", 400);
       result = await asanaRequest(user.id, `/tasks/${encodeURIComponent(body.taskGid)}`, {
         method: "PUT",
-        body: JSON.stringify({
-          data: {
-            name: body.title,
-            notes: body.description,
-            due_on: body.dueOn || null,
-            completed: body.completed,
-          },
-        }),
+        body: JSON.stringify({ data }),
       });
     }
     const db = await database();

@@ -15,6 +15,8 @@ type RuntimeEnv = {
   ASANA_CLIENT_ID?: string;
   ASANA_CLIENT_SECRET?: string;
   TOKEN_ENCRYPTION_KEY?: string;
+  TELEGRAM_BOT_TOKEN?: string;
+  TELEGRAM_WEBHOOK_SECRET?: string;
 };
 
 export function runtimeEnv() {
@@ -118,6 +120,32 @@ const schemaStatements = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_sync_events_user_created
     ON sync_events(user_id, created_at)`,
+  `CREATE TABLE IF NOT EXISTS telegram_links (
+    user_id TEXT PRIMARY KEY,
+    chat_id TEXT NOT NULL UNIQUE,
+    telegram_user_id TEXT NOT NULL,
+    telegram_username TEXT NOT NULL DEFAULT '',
+    active INTEGER NOT NULL DEFAULT 1,
+    linked_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS telegram_link_codes (
+    code_hash TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    used_at TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_telegram_link_codes_user
+    ON telegram_link_codes(user_id, expires_at)`,
+  `CREATE TABLE IF NOT EXISTS telegram_events (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    status TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )`,
 ];
 
 export async function database() {
@@ -294,7 +322,9 @@ export async function currentUser(request: Request, state?: PortalState): Promis
   const loaded = state || (await loadState()).state;
   const cookies = parseCookies(request);
   const platformEmail = request.headers.get("oai-authenticated-user-email");
-  if (platformEmail) {
+  // The hosted Worker is public, so a client-supplied platform header must never
+  // bypass the portal password session. Keep this shortcut for local previews only.
+  if (platformEmail && isLocal(request)) {
     const user = loaded.users.find((candidate) => candidate.email.toLowerCase() === platformEmail.toLowerCase());
     if (user?.active) return { ...user, authMode: "platform" };
   }

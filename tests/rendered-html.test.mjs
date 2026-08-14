@@ -50,6 +50,8 @@ test("durable storage and integration bindings are declared", async () => {
   assert.match(envExample, /GOOGLE_CLIENT_ID/);
   assert.match(envExample, /ASANA_CLIENT_ID/);
   assert.match(envExample, /TOKEN_ENCRYPTION_KEY/);
+  assert.match(envExample, /TELEGRAM_BOT_TOKEN/);
+  assert.match(envExample, /TELEGRAM_WEBHOOK_SECRET/);
   assert.match(envExample, /PORTAL_OWNER_CREDENTIAL/);
   assert.match(envExample, /PORTAL_ADMIN_CREDENTIAL/);
   assert.match(envExample, /PORTAL_PASSWORD_PEPPER/);
@@ -59,6 +61,9 @@ test("durable storage and integration bindings are declared", async () => {
   const credentialMigration = await readFile(new URL("../db/migrations/0002_portal_credentials.sql", import.meta.url), "utf8");
   assert.match(credentialMigration, /CREATE TABLE `portal_credentials`/);
   assert.match(credentialMigration, /CREATE TABLE `portal_login_attempts`/);
+  const telegramMigration = await readFile(new URL("../db/migrations/0003_telegram_integration.sql", import.meta.url), "utf8");
+  assert.match(telegramMigration, /CREATE TABLE `telegram_links`/);
+  assert.match(telegramMigration, /CREATE TABLE `telegram_link_codes`/);
 });
 
 test("management workflow separates structure, work, dashboard, settings, and access", async () => {
@@ -72,6 +77,7 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /api\/auth\/password/);
   assert.match(source, /api\/admin\/users/);
   assert.match(source, /Створити задачу в Asana/);
+  assert.match(source, /Підключити Telegram/);
   assert.match(source, /recalculateHierarchy/);
   assert.match(source, /tree-row-menu/);
   assert.match(source, /mobile-tree-switch/);
@@ -89,6 +95,7 @@ test("password authentication uses slow hashing, rate limiting, and no committed
   assert.match(server, /100_000/);
   assert.match(server, /passwordMaterial/);
   assert.match(server, /HMAC/);
+  assert.match(server, /platformEmail && isLocal\(request\)/);
   assert.match(login, /MAX_FAILURES = 5/);
   assert.match(login, /portal_login_attempts/);
   assert.match(users, /target\?\.role === "owner"/);

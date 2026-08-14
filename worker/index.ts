@@ -6,6 +6,8 @@ interface Env {
   ASSETS: Fetcher;
   DB: D1Database;
   FILES: R2Bucket;
+  PORTAL_BASE_URL?: string;
+  TELEGRAM_WEBHOOK_SECRET?: string;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {
@@ -42,6 +44,11 @@ const worker = {
     }
 
     return handler.fetch(request, env, ctx);
+  },
+  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext) {
+    if (!env.TELEGRAM_WEBHOOK_SECRET) return;
+    const origin = env.PORTAL_BASE_URL || "https://pravdop-management-portal.simonian-e-be8.workers.dev";
+    ctx.waitUntil(handler.fetch(new Request(`${origin}/api/telegram/reminders`, { method: "POST", headers: { "X-Portal-Scheduler-Secret": env.TELEGRAM_WEBHOOK_SECRET } }), env, ctx));
   },
 };
 

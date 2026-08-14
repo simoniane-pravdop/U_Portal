@@ -1,4 +1,5 @@
-import { currentUser, database, jsonError, loadState, mayEdit, runtimeEnv } from "../../lib/server";
+import { baseUrl, currentUser, database, jsonError, loadState, mayEdit, runtimeEnv } from "../../lib/server";
+import { notifyTelegramUsers } from "../../lib/telegram";
 import type { PortalState } from "../../types";
 
 export const dynamic = "force-dynamic";
@@ -105,6 +106,32 @@ export async function POST(request: Request) {
       .bind(JSON.stringify(next), next.revision, now, user.email, "main", current.revision)
       .run();
     if (!result.meta.changes) return jsonError("Конфлікт одночасного редагування", 409);
+  }
+
+  if (next.settings.telegramPlanned) {
+    const entityId = body.entityId || changedNodeIds[0] || [...affectedNodeIds][0];
+    const node = entityId ? next.nodes.find((candidate) => candidate.id === entityId) : undefined;
+    if (node) {
+      const createdBlocker = next.blockers.find((item) => item.nodeId === node.id && !current.blockers.some((before) => before.id === item.id));
+      const createdDecision = next.decisions.find((item) => item.nodeId === node.id && !current.decisions.some((before) => before.id === item.id));
+      const createdAcceptance = next.acceptances.find((item) => item.nodeId === node.id && !current.acceptances.some((before) => before.id === item.id));
+      const beforeNode = current.nodes.find((candidate) => candidate.id === node.id);
+      const becameUnhealthy = beforeNode && beforeNode.health !== node.health && ["risk", "blocked"].includes(node.health);
+      const reported = Boolean(body.action?.includes("робочий звіт"));
+      const recipients = createdBlocker
+        ? [createdBlocker.ownerId, createdBlocker.escalationToId]
+        : createdDecision
+          ? [createdDecision.decisionOwnerId]
+          : createdAcceptance
+            ? [createdAcceptance.acceptorId]
+            : becameUnhealthy || reported
+              ? [node.ownerId, node.acceptorId]
+              : [];
+      if (recipients.length) {
+        const detail = createdBlocker ? `\nБлокер: ${createdBlocker.title}` : createdDecision ? `\nПотрібне рішення: ${createdDecision.question}` : becameUnhealthy ? `\nСтан: ${node.health === "blocked" ? "заблоковано" : "є ризик"}` : "";
+        await notifyTelegramUsers(recipients.filter((id) => id !== user.id), `${body.action || "Оновлено дані"}\n\n${node.code} · ${node.title}${detail}\n\n${baseUrl(request)}/?view=my`);
+      }
+    }
   }
 
   return Response.json({ ...next, currentUser: user, storage, authConfigured: Boolean(runtimeEnv().PORTAL_OWNER_CREDENTIAL || runtimeEnv().GOOGLE_CLIENT_ID) });

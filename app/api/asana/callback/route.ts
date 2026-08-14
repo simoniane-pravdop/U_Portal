@@ -63,5 +63,5 @@ export async function GET(request: Request) {
       new Date().toISOString(),
     )
     .run();
-  return new Response(null, { status: 302, headers: { Location: `${baseUrl(request)}/?view=integrations&asana=connected` } });
+  return new Response(null, { status: 302, headers: { Location: `${baseUrl(request)}/?view=settings&asana=connected` } });
 }
