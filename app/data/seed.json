@@ -1,108 +1,42 @@
 {
-  "version": 1,
+  "version": 2,
   "revision": 1,
   "users": [
-    { "id": "u-edhar", "name": "Едгар Сімонян", "email": "edhar@company.test", "role": "admin", "active": true, "color": "#173f6b" },
-    { "id": "u-dragan", "name": "Валентина Драган", "email": "dragan@company.test", "role": "cycle_owner", "active": true, "color": "#9b5b45" },
-    { "id": "u-gurlov", "name": "Володимир Гурлов", "email": "gurlov@company.test", "role": "coordinator", "active": true, "color": "#39705a" },
-    { "id": "u-tarakanova", "name": "Тараканова", "email": "tarakanova@company.test", "role": "executor", "active": true, "color": "#7560a8" },
-    { "id": "u-marketing", "name": "Маркетолог (пілот)", "email": "marketing@company.test", "role": "executor", "active": true, "color": "#b2791f" }
-  ],
-  "nodes": [
     {
-      "id": "s1", "parentId": null, "code": "S1", "kind": "goal", "title": "Гроші", "description": "Стратегічна ціль компанії.",
-      "result": "Вихід на дохід 2 млн грн чистого заробітку на місяць.", "nonResult": "Разове досягнення без стабільного щомісячного повторення.",
-      "acceptanceCriteria": "Показник підтверджений фінансовою звітністю за погоджений період.", "ownerId": "u-edhar", "assigneeId": "u-edhar", "acceptorId": "u-edhar", "participantIds": ["u-dragan", "u-gurlov"],
-      "lifecycle": "in_progress", "health": "risk", "decisionRequired": false, "priority": "critical", "plannedStart": "2026-08-01", "plannedEnd": "2026-12-31", "forecastEnd": "2026-12-31", "actualStart": "2026-08-01", "actualEnd": "", "progress": 32, "weight": 100, "startMode": "fixed_date", "resource": "Команда розвитку послуг і продажів", "authority": "Власник цілі визначає цикли, ресурси та власників циклів.", "coordinationCadence": "Щомісяця", "controlPlace": "Фінансова звітність", "visibility": "company", "archived": false, "evidence": [],
-      "recurrence": { "enabled": false, "frequency": "monthly", "interval": 1, "nextDate": "" },
-      "asana": { "taskGid": "", "taskUrl": "", "projectGid": "", "sectionGid": "", "lastSyncedAt": null, "syncState": "not_linked", "rules": { "title": "portal", "assignee": "manual", "dates": "manual", "status": "manual", "description": "portal" } },
-      "createdAt": "2026-08-13T08:00:00.000Z", "updatedAt": "2026-08-13T08:00:00.000Z"
+      "id": "u-gurlov",
+      "name": "Володимир Гурлов",
+      "email": "vg@pravdop.com",
+      "role": "owner",
+      "active": true,
+      "color": "#39705a"
     },
     {
-      "id": "s2", "parentId": null, "code": "S2", "kind": "goal", "title": "Люди", "description": "Стратегічна ціль щодо команди.",
-      "result": "Збереження команди та пошук нових сильних кандидатів.", "nonResult": "Формальне закриття вакансій без перевірки якості кандидатів і утримання команди.",
-      "acceptanceCriteria": "Для цілі затверджено вимірювані показники утримання та найму.", "ownerId": "u-edhar", "assigneeId": "u-edhar", "acceptorId": "u-edhar", "participantIds": ["u-gurlov"],
-      "lifecycle": "planned", "health": "normal", "decisionRequired": true, "priority": "high", "plannedStart": "2026-08-15", "plannedEnd": "2026-12-31", "forecastEnd": "2026-12-31", "actualStart": "", "actualEnd": "", "progress": 8, "weight": 100, "startMode": "fixed_date", "resource": "Потребує визначення", "authority": "Власник цілі призначає власників циклів.", "coordinationCadence": "Щомісяця", "controlPlace": "Панель цілі", "visibility": "company", "archived": false, "evidence": [],
-      "recurrence": { "enabled": false, "frequency": "monthly", "interval": 1, "nextDate": "" },
-      "asana": { "taskGid": "", "taskUrl": "", "projectGid": "", "sectionGid": "", "lastSyncedAt": null, "syncState": "not_linked", "rules": { "title": "portal", "assignee": "manual", "dates": "manual", "status": "manual", "description": "portal" } },
-      "createdAt": "2026-08-13T08:00:00.000Z", "updatedAt": "2026-08-13T08:00:00.000Z"
-    },
-    {
-      "id": "p1", "parentId": "s1", "code": "P1", "kind": "cycle", "title": "Розвиток послуг і продажі з публікацій з Драган, Тараканова", "description": "Управлінський цикл у межах цілі S1.",
-      "result": "Оновлені послуги продаються через системну роботу з публікаціями та лідами.", "nonResult": "Окремі публікації без готової послуги, матеріалів і контролю лідів.",
-      "acceptanceCriteria": "Підцикли мають прийняті результати, а вплив на продажі відстежується.", "ownerId": "u-dragan", "assigneeId": "u-dragan", "acceptorId": "u-edhar", "participantIds": ["u-tarakanova", "u-marketing"],
-      "lifecycle": "in_progress", "health": "risk", "decisionRequired": false, "priority": "critical", "plannedStart": "2026-08-01", "plannedEnd": "2026-11-30", "forecastEnd": "2026-12-10", "actualStart": "2026-08-01", "actualEnd": "", "progress": 41, "weight": 70, "startMode": "with_parent", "resource": "Драган, Тараканова, маркетинг, сайт", "authority": "Власник циклу визначає підцикли й їх відповідальних у межах погодженого ресурсу.", "coordinationCadence": "Раз на два тижні", "controlPlace": "Панель циклу", "visibility": "company", "archived": false, "evidence": [],
-      "recurrence": { "enabled": false, "frequency": "monthly", "interval": 1, "nextDate": "" },
-      "asana": { "taskGid": "", "taskUrl": "", "projectGid": "", "sectionGid": "", "lastSyncedAt": null, "syncState": "not_linked", "rules": { "title": "portal", "assignee": "manual", "dates": "manual", "status": "manual", "description": "portal" } },
-      "createdAt": "2026-08-13T08:00:00.000Z", "updatedAt": "2026-08-13T08:00:00.000Z"
-    },
-    {
-      "id": "p11", "parentId": "p1", "code": "P1.1", "kind": "subcycle", "title": "Поновлення старих послуг", "description": "Пілотний підцикл та основна одиниця координації.",
-      "result": "Відібрані старі послуги актуалізовані та готові до продажу з публікацій.", "nonResult": "Лише перелік старих сторінок без актуалізації продажного контуру.",
-      "acceptanceCriteria": "Оновлено сторінку, матеріали, базу знань і запущено контроль лідів.", "ownerId": "u-dragan", "assigneeId": "u-dragan", "acceptorId": "u-edhar", "participantIds": ["u-tarakanova", "u-marketing", "u-gurlov"],
-      "lifecycle": "in_progress", "health": "risk", "decisionRequired": true, "priority": "critical", "plannedStart": "2026-08-03", "plannedEnd": "2026-09-30", "forecastEnd": "2026-10-07", "actualStart": "2026-08-03", "actualEnd": "", "progress": 47, "weight": 100, "startMode": "with_parent", "resource": "12 годин маркетингу на тиждень; участь профільного юриста", "authority": "Самостійно розподіляє завдання; зміни бюджету погоджує з власником циклу.", "coordinationCadence": "Щотижня", "controlPlace": "Картка підциклу", "visibility": "company", "archived": false, "evidence": [],
-      "recurrence": { "enabled": false, "frequency": "monthly", "interval": 1, "nextDate": "" },
-      "asana": { "taskGid": "", "taskUrl": "", "projectGid": "", "sectionGid": "", "lastSyncedAt": null, "syncState": "not_linked", "rules": { "title": "portal", "assignee": "manual", "dates": "manual", "status": "manual", "description": "portal" } },
-      "createdAt": "2026-08-13T08:00:00.000Z", "updatedAt": "2026-08-13T08:00:00.000Z"
-    },
-    {
-      "id": "t111", "parentId": "p11", "code": "P1.1.1", "kind": "task", "title": "Актуалізувати сторінку на сайті", "description": "Перевірити зміст, пропозицію та актуальність сторінки.",
-      "result": "Оновлена сторінка готова до публікації та прийнята власником підциклу.", "nonResult": "Чернетка без перевірки й приймання.",
-      "acceptanceCriteria": "Текст, пакети, заклик до дії та форма звернення перевірені; додано посилання на результат.", "ownerId": "u-dragan", "assigneeId": "u-tarakanova", "acceptorId": "u-dragan", "participantIds": ["u-marketing"],
-      "lifecycle": "in_progress", "health": "normal", "decisionRequired": false, "priority": "high", "plannedStart": "2026-08-03", "plannedEnd": "2026-08-21", "forecastEnd": "2026-08-21", "actualStart": "2026-08-04", "actualEnd": "", "progress": 65, "weight": 30, "startMode": "with_parent", "resource": "Юрист + редактор", "authority": "Зміст змінюється в межах погодженої послуги.", "coordinationCadence": "", "controlPlace": "Посилання на сторінку", "visibility": "company", "archived": false, "evidence": [],
-      "recurrence": { "enabled": false, "frequency": "monthly", "interval": 1, "nextDate": "" },
-      "asana": { "taskGid": "", "taskUrl": "", "projectGid": "", "sectionGid": "", "lastSyncedAt": null, "syncState": "not_linked", "rules": { "title": "portal", "assignee": "manual", "dates": "manual", "status": "manual", "description": "portal" } },
-      "createdAt": "2026-08-13T08:00:00.000Z", "updatedAt": "2026-08-13T08:00:00.000Z"
-    },
-    {
-      "id": "t112", "parentId": "p11", "code": "P1.1.2", "kind": "task", "title": "Розробити маркетингові матеріали", "description": "Підготувати матеріали для публікацій і роботи з лідами.",
-      "result": "Комплект погоджених маркетингових матеріалів готовий до використання.", "nonResult": "Окремий допис без повного комплекту матеріалів.",
-      "acceptanceCriteria": "Є тексти, візуальні вимоги, сценарій використання й відповідальні за публікацію.", "ownerId": "u-dragan", "assigneeId": "u-marketing", "acceptorId": "u-dragan", "participantIds": ["u-tarakanova"],
-      "lifecycle": "in_progress", "health": "risk", "decisionRequired": false, "priority": "high", "plannedStart": "2026-08-03", "plannedEnd": "2026-08-24", "forecastEnd": "2026-08-28", "actualStart": "2026-08-05", "actualEnd": "", "progress": 45, "weight": 25, "startMode": "with_parent", "resource": "Маркетинг", "authority": "Формат матеріалів визначає виконавець; позиціонування погоджує власник.", "coordinationCadence": "", "controlPlace": "Папка матеріалів", "visibility": "company", "archived": false, "evidence": [],
-      "recurrence": { "enabled": false, "frequency": "monthly", "interval": 1, "nextDate": "" },
-      "asana": { "taskGid": "", "taskUrl": "", "projectGid": "", "sectionGid": "", "lastSyncedAt": null, "syncState": "not_linked", "rules": { "title": "portal", "assignee": "manual", "dates": "manual", "status": "manual", "description": "portal" } },
-      "createdAt": "2026-08-13T08:00:00.000Z", "updatedAt": "2026-08-13T08:00:00.000Z"
-    },
-    {
-      "id": "t113", "parentId": "p11", "code": "P1.1.3", "kind": "task", "title": "Розробити або поновити базу знань", "description": "Створити актуальний матеріал для команди продажів і юристів.",
-      "result": "База знань містить актуальний маршрут кваліфікації, межі й матеріали послуги.", "nonResult": "Посилання на старі матеріали без перевірки.",
-      "acceptanceCriteria": "Матеріал перевірений власником послуги та доступний визначеним ролям.", "ownerId": "u-dragan", "assigneeId": "u-gurlov", "acceptorId": "u-dragan", "participantIds": ["u-tarakanova"],
-      "lifecycle": "planned", "health": "blocked", "decisionRequired": true, "priority": "high", "plannedStart": "2026-08-22", "plannedEnd": "2026-09-05", "forecastEnd": "2026-09-12", "actualStart": "", "actualEnd": "", "progress": 10, "weight": 25, "startMode": "after_dependency", "resource": "Власник знань + юрист", "authority": "Може структурувати матеріал; зміни меж послуги погоджує.", "coordinationCadence": "", "controlPlace": "База знань", "visibility": "participants", "archived": false, "evidence": [],
-      "recurrence": { "enabled": false, "frequency": "monthly", "interval": 1, "nextDate": "" },
-      "asana": { "taskGid": "", "taskUrl": "", "projectGid": "", "sectionGid": "", "lastSyncedAt": null, "syncState": "not_linked", "rules": { "title": "portal", "assignee": "manual", "dates": "manual", "status": "asana", "description": "portal" } },
-      "createdAt": "2026-08-13T08:00:00.000Z", "updatedAt": "2026-08-13T08:00:00.000Z"
-    },
-    {
-      "id": "t114", "parentId": "p11", "code": "P1.1.4", "kind": "task", "title": "Перевіряти ліди протягом трьох місяців після публікації", "description": "Відстежувати звернення, джерело, кваліфікацію та продаж.",
-      "result": "За три місяці сформовано перевірюваний звіт про ліди й результативність публікацій.", "nonResult": "Загальна оцінка без реєстру звернень.",
-      "acceptanceCriteria": "Кожен лід має джерело, стан, результат і причину втрати за наявності.", "ownerId": "u-dragan", "assigneeId": "u-marketing", "acceptorId": "u-edhar", "participantIds": ["u-tarakanova"],
-      "lifecycle": "ready", "health": "normal", "decisionRequired": false, "priority": "normal", "plannedStart": "2026-09-01", "plannedEnd": "2026-11-30", "forecastEnd": "2026-11-30", "actualStart": "", "actualEnd": "", "progress": 0, "weight": 20, "startMode": "manual_capacity", "resource": "30 хвилин на тиждень", "authority": "Веде реєстр; зміни методики погоджує з власником циклу.", "coordinationCadence": "Щотижня", "controlPlace": "Реєстр лідів", "visibility": "company", "archived": false, "evidence": [],
-      "recurrence": { "enabled": false, "frequency": "weekly", "interval": 1, "nextDate": "" },
-      "asana": { "taskGid": "", "taskUrl": "", "projectGid": "", "sectionGid": "", "lastSyncedAt": null, "syncState": "not_linked", "rules": { "title": "portal", "assignee": "manual", "dates": "manual", "status": "asana", "description": "portal" } },
-      "createdAt": "2026-08-13T08:00:00.000Z", "updatedAt": "2026-08-13T08:00:00.000Z"
+      "id": "u-edhar",
+      "name": "Едгар Сімонян",
+      "email": "simonian.e@pravdop.com",
+      "role": "admin",
+      "active": true,
+      "color": "#173f6b"
     }
   ],
-  "dependencies": [
-    { "id": "dep-1", "predecessorId": "t111", "successorId": "t113", "type": "finish_start", "createdAt": "2026-08-13T08:00:00.000Z" }
-  ],
-  "blockers": [
-    {
-      "id": "block-1", "nodeId": "t113", "title": "Не затверджено межі оновленої послуги", "facts": "Виконавець не може завершити матеріал без погодженого складу послуги.", "cause": "Рішення щодо складу пакетів ще не прийнято.", "actionsTaken": "Зібрано суперечливі формулювання зі старих матеріалів.", "ownerId": "u-gurlov", "escalationToId": "u-dragan", "recommendation": "Погодити один із двох варіантів складу послуги.", "impact": "Перенесення бази знань і ризик різних обіцянок клієнтам.", "decisionDue": "2026-08-18", "status": "open", "createdAt": "2026-08-13T08:00:00.000Z", "resolvedAt": ""
-    }
-  ],
-  "decisions": [
-    {
-      "id": "decision-1", "nodeId": "t113", "question": "Який склад поновленої послуги затверджуємо для продажу?", "options": "1. Один базовий пакет. 2. Базовий і розширений пакети.", "recommendation": "Затвердити два пакети з чіткими межами.", "decisionOwnerId": "u-dragan", "dueDate": "2026-08-18", "resolution": "", "status": "requested", "createdAt": "2026-08-13T08:00:00.000Z", "decidedAt": ""
-    }
-  ],
+  "nodes": [],
+  "dependencies": [],
+  "blockers": [],
+  "decisions": [],
   "acceptances": [],
   "coordinations": [],
   "audit": [
-    { "id": "audit-seed", "at": "2026-08-13T08:00:00.000Z", "by": "Система", "action": "Створено пілотну структуру S1 / P1 / P1.1", "entityId": "p11" }
+    {
+      "id": "audit-initial-access",
+      "at": "2026-08-14T16:00:00.000Z",
+      "by": "Система",
+      "action": "Створено початкових адміністраторів порталу",
+      "entityId": "portal"
+    }
   ],
   "settings": {
     "organizationName": "Правова Допомога",
-    "allowedGoogleDomain": "",
+    "allowedGoogleDomain": "pravdop.com",
     "timezone": "Europe/Kyiv",
     "asanaNotifications": true,
     "telegramPlanned": true,

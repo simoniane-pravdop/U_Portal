@@ -41,6 +41,7 @@ const startLabels: Record<StartMode, string> = {
   after_dependency: "Після залежності",
 };
 const roleLabels: Record<string, string> = {
+  owner: "Власник порталу",
   admin: "Адміністратор",
   goal_owner: "Власник цілі",
   cycle_owner: "Власник циклу",
@@ -50,7 +51,7 @@ const roleLabels: Record<string, string> = {
 };
 const nav: Array<{ id: View; label: string; hint: string; mark: string }> = [
   { id: "dashboard", label: "Дашборд", hint: "Результати й відхилення", mark: "01" },
-  { id: "tree", label: "Дерево УО", hint: "Структура та паспорти", mark: "02" },
+  { id: "tree", label: "Дерево цілей", hint: "Цикли та завдання", mark: "02" },
   { id: "my", label: "Моя робота", hint: "Виконання й звіти", mark: "03" },
   { id: "coordination", label: "Координація", hint: "Управління підциклами", mark: "04" },
   { id: "settings", label: "Налаштування", hint: "Бібліотеки й інтеграції", mark: "05" },
@@ -238,10 +239,36 @@ function StatusBadge({ node }: { node: WorkNode }) {
   return <span className={`health-badge ${node.health}`}>{node.health === "normal" ? lifecycleLabels[node.lifecycle] : healthLabels[node.health]}</span>;
 }
 
+function LoginScreen({ initialError }: { initialError?: string }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState(initialError || "");
+  const [busy, setBusy] = useState(false);
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch("/api/auth/password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const body = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(body.error || "Не вдалося увійти");
+      window.location.reload();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Не вдалося увійти");
+      setBusy(false);
+    }
+  };
+  return <div className="login-screen"><form className="login-card" onSubmit={(event) => void submit(event)}><div className="loading-mark">УП</div><span>Захищений доступ</span><h1>Управлінський портал</h1><p>Увійдіть за корпоративною адресою, для якої адміністратор надав доступ.</p><label><b>Корпоративна адреса</b><input type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@pravdop.com" required /></label><label><b>Пароль</b><input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>{error && <div className="login-error" role="alert">{error}</div>}<button type="submit" disabled={busy}>{busy ? "Перевіряємо…" : "Увійти"}</button><small>Права доступу та паролі користувачів керуються в налаштуваннях порталу.</small></form></div>;
+}
+
 export function PortalApp() {
   const [payload, setPayload] = useState<PortalPayload | null>(null);
   const [view, setView] = useState<View>("dashboard");
-  const [selectedId, setSelectedId] = useState("p11");
+  const [selectedId, setSelectedId] = useState("");
   const [modal, setModal] = useState<Modal>(null);
   const [draftNode, setDraftNode] = useState<WorkNode | null>(null);
   const [search, setSearch] = useState("");
@@ -339,11 +366,11 @@ export function PortalApp() {
     };
   }, [payload]);
 
-  if (!payload || !data) return loadError ? <div className="login-screen"><div className="login-card"><div className="loading-mark">УП</div><span>Корпоративний доступ</span><h1>Управлінський портал</h1><p>{loadError}</p><a href="/api/auth/google/start">Увійти через Google</a><small>Доступ отримують лише користувачі, додані адміністратором порталу.</small></div></div> : <div className="loading-screen"><div className="loading-mark">УП</div><strong>Готуємо управлінський портал…</strong></div>;
+  if (!payload || !data) return loadError ? <LoginScreen initialError={loadError.startsWith("Потрібен вхід") ? "" : loadError} /> : <div className="loading-screen"><div className="loading-mark">УП</div><strong>Готуємо управлінський портал…</strong></div>;
 
   const userById = (id: string) => payload.users.find((user) => user.id === id);
-  const selected = payload.nodes.find((node) => node.id === selectedId) || payload.nodes[0];
-  const canManage = ["admin", "goal_owner", "cycle_owner", "coordinator"].includes(payload.currentUser.role);
+  const selected = payload.nodes.find((node) => node.id === selectedId && !node.archived) || payload.nodes.find((node) => !node.archived);
+  const canManage = ["owner", "admin", "goal_owner", "cycle_owner", "coordinator"].includes(payload.currentUser.role);
 
   const openCreateKind = (kind: NodeKind, context?: WorkNode) => {
     const requiredParent = parentKind(kind);
@@ -373,7 +400,7 @@ export function PortalApp() {
     const requiredParent = parentKind(draftNode.kind);
     const parent = draftNode.parentId ? payload.nodes.find((node) => node.id === draftNode.parentId) : undefined;
     if ((requiredParent && parent?.kind !== requiredParent) || (!requiredParent && draftNode.parentId)) {
-      setNotice("Оберіть коректний батьківський рівень УО");
+      setNotice("Оберіть коректний батьківський рівень");
       return;
     }
     const exists = payload.nodes.some((node) => node.id === draftNode.id);
@@ -476,19 +503,11 @@ export function PortalApp() {
           <div className="topbar-actions">
             {notice && <span className="notice">{notice}</span>}
             {saving && <span className="saving">Зберігаємо…</span>}
-            <label className="user-switch">
+            <div className="user-switch">
               <UserAvatar user={payload.currentUser} compact />
-              <select
-                value={payload.currentUser.id}
-                onChange={async (event) => {
-                  await fetch("/api/auth/local", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: event.target.value }) });
-                  window.location.reload();
-                }}
-                aria-label="Поточний користувач"
-              >
-                {payload.users.filter((user) => user.active).map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
-              </select>
-            </label>
+              <div><strong>{payload.currentUser.name}</strong><small>{roleLabels[payload.currentUser.role]}</small></div>
+              <button type="button" onClick={async () => { await fetch("/api/auth/logout", { method: "POST" }); window.location.reload(); }}>Вийти</button>
+            </div>
           </div>
         </header>
 
@@ -503,9 +522,9 @@ export function PortalApp() {
               mutate={mutate}
             />
           )}
-          {view === "my" && <MyWork key={selected.id} payload={payload} selected={selected} selectedId={selectedId} setSelectedId={setSelectedId} userById={userById} canManage={canManage} saveWorkUpdate={saveWorkUpdate} submitAcceptance={submitAcceptance} resolveAcceptance={resolveAcceptance} setModal={setModal} asanaStatus={asanaStatus} mutate={mutate} setNotice={setNotice} openTree={(id) => { setSelectedId(id); setView("tree"); }} />}
+          {view === "my" && <MyWork key={selected?.id || "empty"} payload={payload} selected={selected} selectedId={selectedId} setSelectedId={setSelectedId} userById={userById} canManage={canManage} saveWorkUpdate={saveWorkUpdate} submitAcceptance={submitAcceptance} resolveAcceptance={resolveAcceptance} setModal={setModal} asanaStatus={asanaStatus} mutate={mutate} setNotice={setNotice} openTree={(id) => { setSelectedId(id); setView("tree"); }} />}
           {view === "coordination" && <CoordinationView payload={payload} userById={userById} select={(id) => { setSelectedId(id); setView("tree"); }} open={(node) => { setSelectedId(node.id); setModal("coordination"); }} />}
-          {view === "settings" && <SettingsView payload={payload} selected={selected} setSelectedId={setSelectedId} asanaStatus={asanaStatus} mutate={mutate} setNotice={setNotice} />}
+          {view === "settings" && <SettingsView payload={payload} selected={selected} setSelectedId={setSelectedId} asanaStatus={asanaStatus} mutate={mutate} setNotice={setNotice} reload={load} />}
         </div>
       </section>
 
@@ -526,6 +545,9 @@ function PageIntro({ kicker, title, text, actions }: { kicker: string; title: st
 }
 
 function DashboardView({ data, payload, userById, healthFilter, setHealthFilter, mutate, select }: { data: ComputedData; payload: PortalPayload; userById: (id: string) => PortalUser | undefined; healthFilter: "all" | HealthStatus | "overdue" | "decision"; setHealthFilter: (value: "all" | HealthStatus | "overdue" | "decision") => void; mutate: (action: string, entityId: string, recipe: (state: PortalState) => void) => Promise<boolean>; select: (id: string) => void }) {
+  const firstGoal = data.goals[0];
+  const coordination = data.subcycles[0];
+  const coordinationTasks = coordination ? payload.nodes.filter((node) => node.parentId === coordination.id && !node.archived) : [];
   return <>
     <PageIntro kicker="Єдиний керівницький екран" title="Результати, стани та управлінська реакція" text="Цілі, строки, блокери, рішення і навантаження зведені в одному дашборді. Детальна робота виконується в розділі «Моя робота»." />
     <div className="metric-grid">
@@ -536,7 +558,7 @@ function DashboardView({ data, payload, userById, healthFilter, setHealthFilter,
     </div>
     <div className="overview-grid">
       <section className="panel goals-panel">
-        <div className="panel-head"><div><span>01 / Цілі</span><h2>Стан стратегічних цілей</h2></div><button onClick={() => select("s1")}>Відкрити дерево</button></div>
+        <div className="panel-head"><div><span>01 / Цілі</span><h2>Стан стратегічних цілей</h2></div><button disabled={!firstGoal} onClick={() => firstGoal && select(firstGoal.id)}>Відкрити дерево</button></div>
         <div className="goal-list">
           {data.goals.map((goal) => {
             const branch = descendants(payload.nodes, goal.id);
@@ -545,6 +567,7 @@ function DashboardView({ data, payload, userById, healthFilter, setHealthFilter,
               <div className="goal-code">{goal.code}</div><div className="goal-copy"><span>{goal.title}</span><h3>{goal.result}</h3><div className="goal-meta"><UserAvatar user={userById(goal.ownerId)} compact /><small>{userById(goal.ownerId)?.name}</small><i /> <small>{branchTasks.length} завдань</small></div></div><ProgressRing value={goal.progress} />
             </button>;
           })}
+          {!data.goals.length && <p className="empty-state padded">Стратегічних цілей ще немає. Створіть першу ціль у дереві.</p>}
         </div>
       </section>
       <section className="panel attention-panel">
@@ -556,10 +579,10 @@ function DashboardView({ data, payload, userById, healthFilter, setHealthFilter,
       </section>
     </div>
     <section className="panel cadence-strip">
-      <div><span>Найближча координація</span><strong>P1.1 · Поновлення старих послуг</strong><small>Одиниця координації — підцикл, а проблеми піднімаються з конкретних завдань.</small></div>
-      <div className="cadence-stat"><strong>{payload.nodes.filter((node) => node.parentId === "p11" && node.lifecycle === "in_progress").length}</strong><span>у роботі</span></div>
-      <div className="cadence-stat red"><strong>{payload.blockers.filter((item) => item.nodeId.startsWith("t") && item.status === "open").length}</strong><span>блокер</span></div>
-      <button onClick={() => select("p11")}>Перейти до підциклу</button>
+      <div><span>Найближча координація</span><strong>{coordination ? `${coordination.code} · ${coordination.title}` : "Підциклів ще немає"}</strong><small>{coordination ? "Одиниця координації — підцикл, а проблеми піднімаються з конкретних завдань." : "Після створення підциклу тут з’явиться його поточний стан."}</small></div>
+      <div className="cadence-stat"><strong>{coordinationTasks.filter((node) => node.lifecycle === "in_progress").length}</strong><span>у роботі</span></div>
+      <div className="cadence-stat red"><strong>{coordinationTasks.filter((node) => payload.blockers.some((item) => item.nodeId === node.id && item.status === "open")).length}</strong><span>блокер</span></div>
+      <button disabled={!coordination} onClick={() => coordination && select(coordination.id)}>Перейти до підциклу</button>
     </section>
     <div className="dashboard-section-head"><div><span>Відхилення</span><h2>Блокери та відкриті рішення</h2></div><p>Адресат, строк реакції, рекомендація та наслідок без рішення.</p></div>
     <RiskRegisters payload={payload} userById={userById} mutate={mutate} select={select} />
@@ -569,7 +592,7 @@ function DashboardView({ data, payload, userById, healthFilter, setHealthFilter,
 }
 
 function TreeView(props: {
-  payload: PortalPayload; selected: WorkNode; selectedId: string; setSelectedId: (id: string) => void; search: string; setSearch: (value: string) => void;
+  payload: PortalPayload; selected?: WorkNode; selectedId: string; setSelectedId: (id: string) => void; search: string; setSearch: (value: string) => void;
   userById: (id: string) => PortalUser | undefined; canManage: boolean; openCreateKind: (kind: NodeKind, context?: WorkNode) => void; openEdit: (node: WorkNode) => void;
   openWork: (node: WorkNode) => void; mutate: (action: string, entityId: string, recipe: (state: PortalState) => void) => Promise<boolean>;
 }) {
@@ -592,9 +615,9 @@ function TreeView(props: {
     }
   }
   const filtered = active.filter((node) => visibleIds.has(node.id));
-  const predecessors = payload.dependencies.filter((item) => item.successorId === selected.id).map((item) => payload.nodes.find((node) => node.id === item.predecessorId)).filter(Boolean) as WorkNode[];
-  const children = payload.nodes.filter((node) => node.parentId === selected.id && !node.archived);
-  const canEditSelected = canManage || selected.ownerId === payload.currentUser.id;
+  const predecessors = selected ? payload.dependencies.filter((item) => item.successorId === selected.id).map((item) => payload.nodes.find((node) => node.id === item.predecessorId)).filter(Boolean) as WorkNode[] : [];
+  const children = selected ? payload.nodes.filter((node) => node.parentId === selected.id && !node.archived) : [];
+  const canEditSelected = Boolean(selected && (canManage || selected.ownerId === payload.currentUser.id));
 
   const archiveBranch = async (node: WorkNode) => {
     if (!window.confirm(`Видалити ${node.code} з робочого дерева? Запис залишиться в журналі та архіві.`)) return;
@@ -612,36 +635,36 @@ function TreeView(props: {
       <div className={`tree-row ${node.id === selectedId ? "selected" : ""} kind-${node.kind}`} style={{ paddingLeft: 3 + depth * 7 }}>
         <button className="tree-toggle" onClick={() => setExpanded((current) => { const next = new Set(current); if (next.has(node.id)) next.delete(node.id); else next.add(node.id); return next; })} aria-label={expanded.has(node.id) ? "Згорнути" : "Розгорнути"}>{hasChildren ? (expanded.has(node.id) ? "⌄" : "›") : "·"}</button>
         <button className="tree-row-main" onClick={() => { setSelectedId(node.id); setDetailTab("passport"); setMobilePane("card"); }}><span className="tree-code">{node.code}</span><span className="tree-name">{node.title}</span><StatusBadge node={node} /></button>
-        {mayEdit && <details className="tree-row-menu"><summary title="Дії з УО" aria-label={`Дії з ${node.code}`}>⋮</summary><div><button onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); openEdit(node); }}><span>✎</span>Редагувати</button>{node.kind !== "task" && <button onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); openCreateKind(nextKind(node), node); }}><span>＋</span>Додати нижчу УО</button>}<button className="delete" onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void archiveBranch(node); }}><span>×</span>Видалити з дерева</button></div></details>}
+        {mayEdit && <details className="tree-row-menu"><summary title={`Дії з ${kindLabels[node.kind].toLowerCase()}`} aria-label={`Дії з ${node.code}`}>⋮</summary><div><button onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); openEdit(node); }}><span>✎</span>Редагувати</button>{node.kind !== "task" && <button onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); openCreateKind(nextKind(node), node); }}><span>＋</span>Додати нижчий рівень</button>}<button className="delete" onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void archiveBranch(node); }}><span>×</span>Видалити з дерева</button></div></details>}
       </div>
       {hasChildren && expanded.has(node.id) && renderBranch(node.id, depth + 1)}
     </div>;
   });
 
   return <>
-    <PageIntro kicker="Структура управління" title="Дерево управлінських одиниць" text="Структура й паспорти УО. Виконання та звіти — у «Моїй роботі»." actions={canManage && <details className="create-uo-menu"><summary>+ Створити УО</summary><div>{(["goal", "cycle", "subcycle", "task"] as NodeKind[]).map((kind) => <button key={kind} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); openCreateKind(kind, selected); }}><span>{kind === "goal" ? "S" : kind === "cycle" ? "P" : kind === "subcycle" ? "P.x" : "✓"}</span>{kindLabels[kind]}</button>)}</div></details>} />
-    <div className="mobile-tree-switch" role="tablist"><button className={mobilePane === "tree" ? "active" : ""} onClick={() => setMobilePane("tree")}>Дерево</button><button className={mobilePane === "card" ? "active" : ""} onClick={() => setMobilePane("card")}>Картка {selected.code}</button></div>
+    <PageIntro kicker="Структура управління" title="Дерево цілей, циклів і завдань" text="Тут створюється структура та зберігаються паспорти. Виконання й звіти ведуться у «Моїй роботі»." actions={canManage && <details className="create-uo-menu"><summary>+ Створити</summary><div>{(["goal", "cycle", "subcycle", "task"] as NodeKind[]).map((kind) => <button key={kind} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); openCreateKind(kind, selected); }}><span>{kind === "goal" ? "S" : kind === "cycle" ? "P" : kind === "subcycle" ? "P.x" : "✓"}</span>{kindLabels[kind]}</button>)}</div></details>} />
+    <div className="mobile-tree-switch" role="tablist"><button className={mobilePane === "tree" ? "active" : ""} onClick={() => setMobilePane("tree")}>Дерево</button><button disabled={!selected} className={mobilePane === "card" ? "active" : ""} onClick={() => setMobilePane("card")}>{selected ? `Картка ${selected.code}` : "Картка"}</button></div>
     <div className={`tree-workbench ${treeCompact ? "compact-tree" : ""} mobile-pane-${mobilePane}`}>
       <aside className="tree-catalog">
         <div className="catalog-head">{!treeCompact && <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Пошук у дереві…" />}<span>{filtered.length}</span><button className="tree-compact-toggle" onClick={() => setTreeCompact((value) => !value)} title={treeCompact ? "Розгорнути дерево" : "Згорнути дерево до кодів"} aria-label={treeCompact ? "Розгорнути дерево" : "Згорнути дерево до кодів"}>{treeCompact ? "→" : "К"}</button></div>
-        <div className="tree-scroll">{renderBranch(null)}</div>
+        <div className="tree-scroll">{renderBranch(null)}{!filtered.length && <p className="empty-state padded">Дерево порожнє. Створіть першу стратегічну ціль.</p>}</div>
       </aside>
-      <section className="node-detail">
+      {selected ? <section className="node-detail">
         <header className="node-detail-head">
           <div><span>{kindLabels[selected.kind]} · {selected.code}</span><h2>{selected.title}</h2><p>{selected.result}</p></div>
           <div className="node-head-actions"><ProgressRing value={selected.progress} />{canEditSelected && <button className="secondary" onClick={() => openEdit(selected)}>Редагувати паспорт</button>}<button className="primary work-link" onClick={() => openWork(selected)}>Відкрити робочу картку →</button></div>
         </header>
         <div className="status-line"><StatusBadge node={selected} />{selected.decisionRequired && <span className="decision-badge">Потрібне рішення</span>}<span>{lifecycleLabels[selected.lifecycle]}</span><span>Оновлено {new Date(selected.updatedAt).toLocaleString("uk-UA")}</span></div>
-        <div className="detail-tabs" role="tablist">{(["passport", "structure", "history"] as const).map((tab) => <button key={tab} className={detailTab === tab ? "active" : ""} onClick={() => setDetailTab(tab)}>{tab === "passport" ? "Паспорт УО" : tab === "structure" ? "Структура і зв’язки" : "Історія"}</button>)}</div>
-        {detailTab === "passport" && <><div className="detail-grid"><article><span>Власник результату</span><div className="person-line"><UserAvatar user={userById(selected.ownerId)} /><div><strong>{userById(selected.ownerId)?.name}</strong><small>Несе відповідальність за результат</small></div></div></article><article><span>Виконавець / координатор</span><div className="person-line"><UserAvatar user={userById(selected.assigneeId)} /><div><strong>{userById(selected.assigneeId)?.name}</strong><small>{selected.kind === "task" ? "Виконує завдання" : "Координує нижчі рівні"}</small></div></div></article><article><span>Плановий строк</span><strong>{dateLabel(selected.plannedEnd)}</strong><small>{daysUntil(selected.plannedEnd) !== null ? `${daysUntil(selected.plannedEnd)} дн. до строку` : "Дата не встановлена"}</small></article><article><span>Фактичний стан</span><strong>{lifecycleLabels[selected.lifecycle]} · {selected.progress}%</strong><small>{selected.kind === "task" ? "Оновлюється у робочій картці" : "Розраховано з нижчих рівнів"}</small></article></div><div className="detail-columns info-only"><div><section className="detail-section"><h3>Результат і межі</h3><dl><dt>Опис</dt><dd>{selected.description || "Не визначено"}</dd><dt>Готовий результат</dt><dd>{selected.result || "Не визначено"}</dd><dt>Що не є результатом</dt><dd>{selected.nonResult || "Не визначено"}</dd><dt>Критерій приймання</dt><dd>{selected.acceptanceCriteria || "Не визначено"}</dd></dl></section><section className="detail-section"><h3>Умови виконання</h3><dl><dt>Спосіб початку</dt><dd>{startLabels[selected.startMode]}</dd><dt>Повноваження</dt><dd>{selected.authority || "Не визначено"}</dd><dt>Ресурс</dt><dd>{selected.resource || "Не визначено"}</dd><dt>Контрольне місце</dt><dd>{selected.controlPlace || "Не визначено"}</dd></dl></section></div><aside><section className="side-section explainer"><b>Режим перегляду</b><h3>Дерево не є робочим журналом</h3><p>Тут перевіряють місце УО, межі, відповідального та агрегований стан. Виконання, звіт і Asana відкриваються в робочій картці.</p><button className="primary" onClick={() => openWork(selected)}>Перейти до роботи</button></section><section className="side-section"><div className="side-head"><h3>Докази результату</h3><span>{selected.evidence.length}</span></div>{selected.evidence.map((item) => <a className="evidence-row" key={item.id} href={item.kind === "note" ? undefined : item.value} target="_blank" rel="noreferrer"><span>{item.kind === "file" ? "Файл" : item.kind === "link" ? "Посилання" : "Нотатка"}</span><strong>{item.label}</strong></a>)}{!selected.evidence.length && <p className="empty-state">Докази ще не додано.</p>}</section></aside></div></>}
-        {detailTab === "structure" && <div className="detail-tab-body"><section className="detail-section"><h3>Батьківський рівень</h3>{selected.parentId ? <button className="parent-link" onClick={() => setSelectedId(selected.parentId!)}>{payload.nodes.find((node) => node.id === selected.parentId)?.code} · {payload.nodes.find((node) => node.id === selected.parentId)?.title}</button> : <p className="empty-state">Верхній рівень дерева.</p>}</section><section className="detail-section"><h3>Нижчий рівень</h3>{children.length > 0 ? <div className="child-list">{children.map((node) => <button key={node.id} onClick={() => setSelectedId(node.id)}><span>{node.code}</span><strong>{node.title}</strong><StatusBadge node={node} /></button>)}</div> : <p className="empty-state">Нижчих УО немає.</p>}</section><section className="detail-section"><h3>Залежності виконання</h3>{predecessors.length ? predecessors.map((node) => <button className="parent-link" key={node.id} onClick={() => setSelectedId(node.id)}>Після {node.code} · {node.title}</button>) : <p className="empty-state">Окремих попередників немає.</p>}</section></div>}
-        {detailTab === "history" && <div className="detail-tab-body"><section className="detail-section"><h3>Робочі звіти</h3><div className="update-history">{(selected.updates || []).map((item) => <article key={item.id}><time>{new Date(item.createdAt).toLocaleString("uk-UA")}</time><strong>{lifecycleLabels[item.lifecycle]} · {item.progress}%</strong><p>{item.summary}</p><small>Наступна дія: {item.nextAction || "Не вказано"}</small></article>)}{!(selected.updates || []).length && <p className="empty-state">Робочих звітів ще немає.</p>}</div></section><section className="detail-section"><h3>Журнал змін УО</h3><div className="update-history">{payload.audit.filter((entry) => entry.entityId === selected.id).map((entry) => <article key={entry.id}><time>{new Date(entry.at).toLocaleString("uk-UA")}</time><strong>{entry.action}</strong><small>{entry.by}</small></article>)}</div></section></div>}
-      </section>
+        <div className="detail-tabs" role="tablist">{(["passport", "structure", "history"] as const).map((tab) => <button key={tab} className={detailTab === tab ? "active" : ""} onClick={() => setDetailTab(tab)}>{tab === "passport" ? "Паспорт" : tab === "structure" ? "Структура і зв’язки" : "Історія"}</button>)}</div>
+        {detailTab === "passport" && <><div className="detail-grid"><article><span>Власник результату</span><div className="person-line"><UserAvatar user={userById(selected.ownerId)} /><div><strong>{userById(selected.ownerId)?.name}</strong><small>Несе відповідальність за результат</small></div></div></article><article><span>Виконавець / координатор</span><div className="person-line"><UserAvatar user={userById(selected.assigneeId)} /><div><strong>{userById(selected.assigneeId)?.name}</strong><small>{selected.kind === "task" ? "Виконує завдання" : "Координує нижчі рівні"}</small></div></div></article><article><span>Плановий строк</span><strong>{dateLabel(selected.plannedEnd)}</strong><small>{daysUntil(selected.plannedEnd) !== null ? `${daysUntil(selected.plannedEnd)} дн. до строку` : "Дата не встановлена"}</small></article><article><span>Фактичний стан</span><strong>{lifecycleLabels[selected.lifecycle]} · {selected.progress}%</strong><small>{selected.kind === "task" ? "Оновлюється у робочій картці" : "Розраховано з нижчих рівнів"}</small></article></div><div className="detail-columns info-only"><div><section className="detail-section"><h3>Результат і межі</h3><dl><dt>Опис</dt><dd>{selected.description || "Не визначено"}</dd><dt>Готовий результат</dt><dd>{selected.result || "Не визначено"}</dd><dt>Що не є результатом</dt><dd>{selected.nonResult || "Не визначено"}</dd><dt>Критерій приймання</dt><dd>{selected.acceptanceCriteria || "Не визначено"}</dd></dl></section><section className="detail-section"><h3>Умови виконання</h3><dl><dt>Спосіб початку</dt><dd>{startLabels[selected.startMode]}</dd><dt>Повноваження</dt><dd>{selected.authority || "Не визначено"}</dd><dt>Ресурс</dt><dd>{selected.resource || "Не визначено"}</dd><dt>Контрольне місце</dt><dd>{selected.controlPlace || "Не визначено"}</dd></dl></section></div><aside><section className="side-section explainer"><b>Режим перегляду</b><h3>Дерево не є робочим журналом</h3><p>Тут перевіряють місце в структурі, межі, відповідального та агрегований стан. Виконання, звіт і Asana відкриваються в робочій картці.</p><button className="primary" onClick={() => openWork(selected)}>Перейти до роботи</button></section><section className="side-section"><div className="side-head"><h3>Докази результату</h3><span>{selected.evidence.length}</span></div>{selected.evidence.map((item) => <a className="evidence-row" key={item.id} href={item.kind === "note" ? undefined : item.value} target="_blank" rel="noreferrer"><span>{item.kind === "file" ? "Файл" : item.kind === "link" ? "Посилання" : "Нотатка"}</span><strong>{item.label}</strong></a>)}{!selected.evidence.length && <p className="empty-state">Докази ще не додано.</p>}</section></aside></div></>}
+        {detailTab === "structure" && <div className="detail-tab-body"><section className="detail-section"><h3>Батьківський рівень</h3>{selected.parentId ? <button className="parent-link" onClick={() => setSelectedId(selected.parentId!)}>{payload.nodes.find((node) => node.id === selected.parentId)?.code} · {payload.nodes.find((node) => node.id === selected.parentId)?.title}</button> : <p className="empty-state">Верхній рівень дерева.</p>}</section><section className="detail-section"><h3>Нижчий рівень</h3>{children.length > 0 ? <div className="child-list">{children.map((node) => <button key={node.id} onClick={() => setSelectedId(node.id)}><span>{node.code}</span><strong>{node.title}</strong><StatusBadge node={node} /></button>)}</div> : <p className="empty-state">Нижчих рівнів немає.</p>}</section><section className="detail-section"><h3>Залежності виконання</h3>{predecessors.length ? predecessors.map((node) => <button className="parent-link" key={node.id} onClick={() => setSelectedId(node.id)}>Після {node.code} · {node.title}</button>) : <p className="empty-state">Окремих попередників немає.</p>}</section></div>}
+        {detailTab === "history" && <div className="detail-tab-body"><section className="detail-section"><h3>Робочі звіти</h3><div className="update-history">{(selected.updates || []).map((item) => <article key={item.id}><time>{new Date(item.createdAt).toLocaleString("uk-UA")}</time><strong>{lifecycleLabels[item.lifecycle]} · {item.progress}%</strong><p>{item.summary}</p><small>Наступна дія: {item.nextAction || "Не вказано"}</small></article>)}{!(selected.updates || []).length && <p className="empty-state">Робочих звітів ще немає.</p>}</div></section><section className="detail-section"><h3>Журнал змін</h3><div className="update-history">{payload.audit.filter((entry) => entry.entityId === selected.id).map((entry) => <article key={entry.id}><time>{new Date(entry.at).toLocaleString("uk-UA")}</time><strong>{entry.action}</strong><small>{entry.by}</small></article>)}</div></section></div>}
+      </section> : <section className="node-detail empty-tree"><div><span>Початок роботи</span><h2>Створіть першу стратегічну ціль</h2><p>Після цього до неї можна буде послідовно додати управлінські цикли, підцикли та конкретні завдання.</p>{canManage && <button className="primary" onClick={() => openCreateKind("goal")}>+ Створити стратегічну ціль</button>}</div></section>}
     </div>
   </>;
 }
 
-function MyWork({ payload, selected, selectedId, setSelectedId, userById, canManage, saveWorkUpdate, submitAcceptance, resolveAcceptance, setModal, asanaStatus, mutate, setNotice, openTree }: { payload: PortalPayload; selected: WorkNode; selectedId: string; setSelectedId: (id: string) => void; userById: (id: string) => PortalUser | undefined; canManage: boolean; saveWorkUpdate: (node: WorkNode, update: Omit<WorkUpdate, "id" | "createdAt" | "createdBy" | "source">) => Promise<boolean>; submitAcceptance: (node: WorkNode) => Promise<boolean>; resolveAcceptance: (acceptance: Acceptance, accepted: boolean) => Promise<boolean>; setModal: (modal: Modal) => void; asanaStatus: { configured: boolean; connected: boolean; connection?: Record<string, string> } | null; mutate: (action: string, entityId: string, recipe: (state: PortalState) => void) => Promise<boolean>; setNotice: (value: string) => void; openTree: (id: string) => void }) {
+function MyWork({ payload, selected, selectedId, setSelectedId, userById, canManage, saveWorkUpdate, submitAcceptance, resolveAcceptance, setModal, asanaStatus, mutate, setNotice, openTree }: { payload: PortalPayload; selected?: WorkNode; selectedId: string; setSelectedId: (id: string) => void; userById: (id: string) => PortalUser | undefined; canManage: boolean; saveWorkUpdate: (node: WorkNode, update: Omit<WorkUpdate, "id" | "createdAt" | "createdBy" | "source">) => Promise<boolean>; submitAcceptance: (node: WorkNode) => Promise<boolean>; resolveAcceptance: (acceptance: Acceptance, accepted: boolean) => Promise<boolean>; setModal: (modal: Modal) => void; asanaStatus: { configured: boolean; connected: boolean; connection?: Record<string, string> } | null; mutate: (action: string, entityId: string, recipe: (state: PortalState) => void) => Promise<boolean>; setNotice: (value: string) => void; openTree: (id: string) => void }) {
   const [filter, setFilter] = useState<"action" | "manage" | "acceptance" | "all">("action");
   const mine = payload.nodes.filter((node) => !node.archived && (node.ownerId === payload.currentUser.id || node.assigneeId === payload.currentUser.id || node.acceptorId === payload.currentUser.id));
   const filtered = mine.filter((node) => filter === "all" || filter === "action" && node.assigneeId === payload.currentUser.id && !["completed", "cancelled"].includes(node.lifecycle) || filter === "manage" && node.ownerId === payload.currentUser.id && node.assigneeId !== payload.currentUser.id || filter === "acceptance" && node.acceptorId === payload.currentUser.id && node.lifecycle === "acceptance");
@@ -650,13 +673,13 @@ function MyWork({ payload, selected, selectedId, setSelectedId, userById, canMan
   const children = current ? payload.nodes.filter((node) => node.parentId === current.id && !node.archived) : [];
   const mayWork = current && (canManage || current.ownerId === payload.currentUser.id || current.assigneeId === payload.currentUser.id);
 
-  return <><PageIntro kicker="Робочий контур" title={`Моя робота · ${payload.currentUser.name}`} text="Тут виконується УО: оновлюється фактичний стан, подається звіт, додаються докази, створюється або звіряється задача Asana та передається результат." />
+  return <><PageIntro kicker="Робочий контур" title={`Моя робота · ${payload.currentUser.name}`} text="Тут виконуються цілі, цикли й завдання: оновлюється фактичний стан, подається звіт, додаються докази, створюється або звіряється задача Asana та передається результат." />
     <div className="my-workbench">
-      <aside className="work-inbox"><div className="work-filter">{(["action", "manage", "acceptance", "all"] as const).map((item) => <button key={item} className={filter === item ? "active" : ""} onClick={() => setFilter(item)}>{item === "action" ? "Мої дії" : item === "manage" ? "Координую" : item === "acceptance" ? "Приймаю" : "Усі"}</button>)}</div><div className="work-inbox-list">{filtered.map((node) => <button className={`work-list-row ${node.id === current?.id ? "selected" : ""}`} key={node.id} onClick={() => setSelectedId(node.id)}><div><span>{kindLabels[node.kind]} · {node.code}</span><strong>{node.title}</strong></div><StatusBadge node={node} /><footer><small>{node.progress}%</small><time>{dateLabel(node.plannedEnd)}</time></footer></button>)}{!filtered.length && <p className="empty-state padded">У цьому переліку немає відкритих УО.</p>}</div></aside>
+      <aside className="work-inbox"><div className="work-filter">{(["action", "manage", "acceptance", "all"] as const).map((item) => <button key={item} className={filter === item ? "active" : ""} onClick={() => setFilter(item)}>{item === "action" ? "Мої дії" : item === "manage" ? "Координую" : item === "acceptance" ? "Приймаю" : "Усі"}</button>)}</div><div className="work-inbox-list">{filtered.map((node) => <button className={`work-list-row ${node.id === current?.id ? "selected" : ""}`} key={node.id} onClick={() => setSelectedId(node.id)}><div><span>{kindLabels[node.kind]} · {node.code}</span><strong>{node.title}</strong></div><StatusBadge node={node} /><footer><small>{node.progress}%</small><time>{dateLabel(node.plannedEnd)}</time></footer></button>)}{!filtered.length && <p className="empty-state padded">У цьому переліку немає відкритих цілей, циклів або завдань.</p>}</div></aside>
       {current ? <section className="work-desk"><header className="work-desk-head"><div><span>{kindLabels[current.kind]} · {current.code}</span><h2>{current.title}</h2><p>{current.result}</p></div><div><ProgressRing value={current.progress} /><button className="secondary" onClick={() => openTree(current.id)}>Паспорт у дереві</button></div></header><div className="status-line"><StatusBadge node={current} />{current.decisionRequired && <span className="decision-badge">Потрібне рішення</span>}<span>Строк {dateLabel(current.plannedEnd)}</span><span>Прогноз {dateLabel(current.forecastEnd)}</span></div>
         <div className="work-summary-grid"><article><span>Власник результату</span><div className="person-line"><UserAvatar user={userById(current.ownerId)} compact /><strong>{userById(current.ownerId)?.name}</strong></div></article><article><span>Виконавець</span><div className="person-line"><UserAvatar user={userById(current.assigneeId)} compact /><strong>{userById(current.assigneeId)?.name}</strong></div></article><article><span>Приймає результат</span><div className="person-line"><UserAvatar user={userById(current.acceptorId)} compact /><strong>{userById(current.acceptorId)?.name}</strong></div></article></div>
-        {current.kind === "task" ? <div className="execution-grid"><div><WorkStatusForm key={`${current.id}-${current.updatedAt}`} node={current} disabled={!mayWork} save={(update) => saveWorkUpdate(current, update)} /><section className="work-section"><div className="work-section-head"><div><span>Результат</span><h3>Докази та передання</h3></div><button onClick={() => setModal("evidence")}>+ Додати доказ</button></div><p>{current.acceptanceCriteria}</p><div className="evidence-stack">{current.evidence.map((item) => <a key={item.id} href={item.kind === "note" ? undefined : item.value} target="_blank" rel="noreferrer"><b>{item.label}</b><span>{item.kind === "file" ? "Файл" : item.kind === "link" ? "Посилання" : item.value}</span></a>)}{!current.evidence.length && <span className="empty-state">Доказів ще немає.</span>}</div><div className="work-action-row"><button onClick={() => setModal("blocker")}>Додати блокер</button><button onClick={() => setModal("decision")}>Запитати рішення</button><button onClick={() => setModal("dependency")}>Додати залежність</button>{!["acceptance", "completed"].includes(current.lifecycle) && <button className="primary" onClick={() => void submitAcceptance(current)}>Передати на приймання</button>}</div>{latestAcceptance && (payload.currentUser.id === latestAcceptance.acceptorId || canManage) && <div className="acceptance-box"><strong>Результат очікує приймання</strong><div><button className="negative" onClick={() => void resolveAcceptance(latestAcceptance, false)}>Повернути</button><button className="positive" onClick={() => void resolveAcceptance(latestAcceptance, true)}>Прийняти</button></div></div>}</section></div><aside><AsanaSyncPanel key={`${current.id}-${current.asana.taskGid}`} payload={payload} selected={current} asanaStatus={asanaStatus} mutate={mutate} setNotice={setNotice} compact /><WorkUpdateHistory node={current} userById={userById} /></aside></div> : <div className="aggregate-work"><section className="work-section aggregate-note"><span>Агрегований рівень</span><h3>Стан цієї УО формується з нижчих одиниць</h3><p>Прогрес, ризик і статус перераховуються після кожного звіту по завданню. Для підциклу додатково зберігається координаційний знімок.</p>{current.kind === "subcycle" && <button className="primary" onClick={() => setModal("coordination")}>Зафіксувати координацію</button>}</section><section className="work-section"><div className="work-section-head"><div><span>Нижчі УО</span><h3>Джерела стану</h3></div><b>{children.length}</b></div><div className="aggregate-children">{children.map((node) => <button key={node.id} onClick={() => setSelectedId(node.id)}><span>{node.code}</span><strong>{node.title}</strong><em>{node.progress}%</em><StatusBadge node={node} /></button>)}</div></section></div>}
-      </section> : <section className="work-desk empty-work"><h2>Оберіть управлінську одиницю</h2><p>Робоча картка відкриється тут.</p></section>}
+        {current.kind === "task" ? <div className="execution-grid"><div><WorkStatusForm key={`${current.id}-${current.updatedAt}`} node={current} disabled={!mayWork} save={(update) => saveWorkUpdate(current, update)} /><section className="work-section"><div className="work-section-head"><div><span>Результат</span><h3>Докази та передання</h3></div><button onClick={() => setModal("evidence")}>+ Додати доказ</button></div><p>{current.acceptanceCriteria}</p><div className="evidence-stack">{current.evidence.map((item) => <a key={item.id} href={item.kind === "note" ? undefined : item.value} target="_blank" rel="noreferrer"><b>{item.label}</b><span>{item.kind === "file" ? "Файл" : item.kind === "link" ? "Посилання" : item.value}</span></a>)}{!current.evidence.length && <span className="empty-state">Доказів ще немає.</span>}</div><div className="work-action-row"><button onClick={() => setModal("blocker")}>Додати блокер</button><button onClick={() => setModal("decision")}>Запитати рішення</button><button onClick={() => setModal("dependency")}>Додати залежність</button>{!["acceptance", "completed"].includes(current.lifecycle) && <button className="primary" onClick={() => void submitAcceptance(current)}>Передати на приймання</button>}</div>{latestAcceptance && (payload.currentUser.id === latestAcceptance.acceptorId || canManage) && <div className="acceptance-box"><strong>Результат очікує приймання</strong><div><button className="negative" onClick={() => void resolveAcceptance(latestAcceptance, false)}>Повернути</button><button className="positive" onClick={() => void resolveAcceptance(latestAcceptance, true)}>Прийняти</button></div></div>}</section></div><aside><AsanaSyncPanel key={`${current.id}-${current.asana.taskGid}`} payload={payload} selected={current} asanaStatus={asanaStatus} mutate={mutate} setNotice={setNotice} compact /><WorkUpdateHistory node={current} userById={userById} /></aside></div> : <div className="aggregate-work"><section className="work-section aggregate-note"><span>Агрегований рівень</span><h3>Стан цього рівня формується з нижчих рівнів</h3><p>Прогрес, ризик і статус перераховуються після кожного звіту по завданню. Для підциклу додатково зберігається координаційний знімок.</p>{current.kind === "subcycle" && <button className="primary" onClick={() => setModal("coordination")}>Зафіксувати координацію</button>}</section><section className="work-section"><div className="work-section-head"><div><span>Нижчі рівні</span><h3>Джерела стану</h3></div><b>{children.length}</b></div><div className="aggregate-children">{children.map((node) => <button key={node.id} onClick={() => setSelectedId(node.id)}><span>{node.code}</span><strong>{node.title}</strong><em>{node.progress}%</em><StatusBadge node={node} /></button>)}</div></section></div>}
+      </section> : <section className="work-desk empty-work"><h2>Робочих карток ще немає</h2><p>Після створення цілі, циклу або завдання доступні вам картки з’являться тут.</p></section>}
     </div>
   </>;
 }
@@ -751,27 +774,69 @@ function AsanaSyncPanel({ payload, selected, asanaStatus, mutate, setNotice, com
   return <><div className="integration-grid"><section className="panel integration-main"><div className="integration-brand"><div className="asana-logo">A</div><div><span>Asana</span><h2>{asanaStatus?.connected ? "Особистий акаунт підключено" : "Підключення очікується"}</h2><p>{asanaStatus?.configured ? "Доступ налаштовано для цього середовища." : "На localhost потрібно додати ключі Asana-застосунку до локального середовища."}</p></div><span className={`connection-state ${asanaStatus?.connected ? "connected" : ""}`}>{asanaStatus?.connected ? "Підключено" : "Не підключено"}</span></div>{asanaStatus?.connected ? <div className="connected-user"><strong>{String(asanaStatus.connection?.asana_user_name || payload.currentUser.name)}</strong><small>Зміни виконуватимуться від цього користувача</small></div> : <a className={`button-link ${!asanaStatus?.configured ? "disabled" : ""}`} href={asanaStatus?.configured ? "/api/asana/start" : undefined}>Підключити мій Asana-акаунт</a>}</section><section className="panel"><div className="panel-head"><div><span>Наступний канал</span><h2>Telegram-бот</h2></div><span className="planned-label">Заплановано</span></div><p className="panel-copy">Після стабілізації управлінського циклу: особисті нагадування, блокери та запити рішень. Бот не буде контрольним джерелом даних.</p></section></div>{syncPanel}</>;
 }
 
-function SettingsView({ payload, selected, setSelectedId, asanaStatus, mutate, setNotice }: { payload: PortalPayload; selected: WorkNode; setSelectedId: (id: string) => void; asanaStatus: { configured: boolean; connected: boolean; connection?: Record<string, string> } | null; mutate: (action: string, entityId: string, recipe: (state: PortalState) => void) => Promise<boolean>; setNotice: (value: string) => void }) {
+function SettingsView({ payload, selected, setSelectedId, asanaStatus, mutate, setNotice, reload }: { payload: PortalPayload; selected?: WorkNode; setSelectedId: (id: string) => void; asanaStatus: { configured: boolean; connected: boolean; connection?: Record<string, string> } | null; mutate: (action: string, entityId: string, recipe: (state: PortalState) => void) => Promise<boolean>; setNotice: (value: string) => void; reload: () => Promise<PortalPayload> }) {
   return <><PageIntro kicker="Адміністрування" title="Налаштування, бібліотеки та інтеграції" text="Тут адміністратор керує довідниками порталу, ролями доступу, повтореннями й правилами обміну з зовнішніми системами." />
     <div className="settings-section-head"><span>Бібліотеки</span><h2>Учасники порталу та відповідальні</h2><p>Записи цієї бібліотеки використовуються в усіх полях власника, виконавця, приймання та ескалації.</p></div>
-    <UserLibraryEditor payload={payload} mutate={mutate} />
-    <div className="settings-section-head"><div><span>Інтеграції</span><h2>Asana та канали повідомлень</h2></div><label className="settings-node-picker"><span>Налаштувати для УО</span><select value={selected.id} onChange={(event) => setSelectedId(event.target.value)}>{payload.nodes.filter((node) => !node.archived).map((node) => <option key={node.id} value={node.id}>{node.code} · {node.title}</option>)}</select></label></div>
-    <AsanaSyncPanel key={`${selected.id}-settings`} payload={payload} selected={selected} asanaStatus={asanaStatus} mutate={mutate} setNotice={setNotice} />
-    <div className="settings-layout settings-bottom"><section className="panel"><div className="panel-head"><div><span>Розвиток</span><h2>Повторювані цикли</h2></div><span className="planned-label">Архітектуру закладено</span></div><p className="panel-copy">Кожна УО вже має правило повторення, інтервал і наступну дату. Автоматичне створення екземплярів буде ввімкнено після першого реального повторюваного циклу.</p><div className="future-box"><strong>Майбутній сценарій</strong><span>Шаблон → дата запуску → новий екземпляр → зв’язок із попереднім періодом → окрема звітність.</span></div></section><section className="panel"><div className="panel-head"><div><span>Довідники наступної черги</span><h2>Кероване розширення</h2></div></div><div className="library-roadmap"><span>Ролі та повноваження</span><span>Типи результатів</span><span>Причини блокерів</span><span>Шаблони координації</span><span>Джерела даних</span></div></section></div>
+    <UserLibraryEditor payload={payload} reload={reload} setNotice={setNotice} />
+    <div className="settings-section-head"><div><span>Інтеграції</span><h2>Asana та канали повідомлень</h2></div>{selected && <label className="settings-node-picker"><span>Ціль, цикл або завдання для синхронізації</span><select value={selected.id} onChange={(event) => setSelectedId(event.target.value)}>{payload.nodes.filter((node) => !node.archived).map((node) => <option key={node.id} value={node.id}>{node.code} · {node.title}</option>)}</select></label>}</div>
+    {selected ? <AsanaSyncPanel key={`${selected.id}-settings`} payload={payload} selected={selected} asanaStatus={asanaStatus} mutate={mutate} setNotice={setNotice} /> : <section className="panel integration-empty"><h2>Синхронізація з Asana</h2><p>Створіть хоча б одну ціль, цикл або завдання, щоб налаштувати обмін даними з Asana.</p></section>}
+    <div className="settings-layout settings-bottom"><section className="panel"><div className="panel-head"><div><span>Розвиток</span><h2>Повторювані цикли</h2></div><span className="planned-label">Архітектуру закладено</span></div><p className="panel-copy">Кожна ціль, цикл, підцикл або завдання має правило повторення, інтервал і наступну дату. Автоматичне створення екземплярів буде ввімкнено після першого реального повторюваного циклу.</p><div className="future-box"><strong>Майбутній сценарій</strong><span>Шаблон → дата запуску → новий екземпляр → зв’язок із попереднім періодом → окрема звітність.</span></div></section><section className="panel"><div className="panel-head"><div><span>Довідники наступної черги</span><h2>Кероване розширення</h2></div></div><div className="library-roadmap"><span>Ролі та повноваження</span><span>Типи результатів</span><span>Причини блокерів</span><span>Шаблони координації</span><span>Джерела даних</span></div></section></div>
     <section className="panel audit-panel"><div className="panel-head"><div><span>Контроль</span><h2>Журнал змін</h2></div><span>{payload.audit.length} записів</span></div><div className="audit-list">{payload.audit.slice(0, 30).map((entry) => <div key={entry.id}><time>{new Date(entry.at).toLocaleString("uk-UA")}</time><strong>{entry.action}</strong><span>{entry.by}</span><code>{entry.entityId}</code></div>)}</div></section>
   </>;
 }
 
-function UserLibraryEditor({ payload, mutate }: { payload: PortalPayload; mutate: (action: string, entityId: string, recipe: (state: PortalState) => void) => Promise<boolean> }) {
-  const [newUser, setNewUser] = useState({ name: "", email: "", role: "executor" as PortalUser["role"] });
-  const editable = payload.currentUser.role === "admin";
-  const add = async () => {
-    if (!newUser.name.trim() || !newUser.email.trim()) return;
-    const user: PortalUser = { id: crypto.randomUUID(), name: newUser.name.trim(), email: newUser.email.trim(), role: newUser.role, active: true, color: "#526f8f" };
-    const ok = await mutate("Додано учасника порталу", user.id, (state) => state.users.push(user));
-    if (ok) setNewUser({ name: "", email: "", role: "executor" });
+function generatePassword() {
+  const groups = ["ABCDEFGHJKLMNPQRSTUVWXYZ", "abcdefghijkmnopqrstuvwxyz", "23456789", "!@#$%_-+"];
+  const alphabet = groups.join("");
+  const values = crypto.getRandomValues(new Uint32Array(20));
+  const characters = groups.map((group, index) => group[values[index] % group.length]);
+  for (let index = groups.length; index < values.length; index += 1) characters.push(alphabet[values[index] % alphabet.length]);
+  for (let index = characters.length - 1; index > 0; index -= 1) {
+    const target = values[index] % (index + 1);
+    [characters[index], characters[target]] = [characters[target], characters[index]];
+  }
+  return characters.join("");
+}
+
+function UserLibraryEditor({ payload, reload, setNotice }: { payload: PortalPayload; reload: () => Promise<PortalPayload>; setNotice: (value: string) => void }) {
+  const [newUser, setNewUser] = useState({ name: "", email: "", role: "executor" as PortalUser["role"], password: generatePassword() });
+  const [issued, setIssued] = useState<{ name: string; password: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const editable = ["owner", "admin"].includes(payload.currentUser.role);
+  const roleOptions = Object.entries(roleLabels).filter(([value]) => value !== "owner" && (payload.currentUser.role === "owner" || value !== "admin"));
+  const manage = async (body: Record<string, unknown>) => {
+    setBusy(true);
+    setNotice("");
+    try {
+      const response = await fetch("/api/admin/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...body, expectedRevision: payload.revision }) });
+      const result = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(result.error || "Не вдалося оновити доступ");
+      await reload();
+      setNotice("Доступ користувача оновлено");
+      return true;
+    } catch (cause) {
+      setNotice(cause instanceof Error ? cause.message : "Не вдалося оновити доступ");
+      return false;
+    } finally {
+      setBusy(false);
+    }
   };
-  return <section className="panel user-library"><div className="panel-head"><div><span>Користувачі</span><h2>Редактор учасників</h2></div><div className="library-head-meta"><small>{editable ? "Редагування доступне" : "Перегляд без редагування"}</small><b className="count">{payload.users.filter((user) => user.active).length}</b></div></div><div className="library-add"><input disabled={!editable} value={newUser.name} onChange={(event) => setNewUser({ ...newUser, name: event.target.value })} placeholder="Ім’я та прізвище" /><input disabled={!editable} value={newUser.email} onChange={(event) => setNewUser({ ...newUser, email: event.target.value })} placeholder="Корпоративна адреса" /><select disabled={!editable} value={newUser.role} onChange={(event) => setNewUser({ ...newUser, role: event.target.value as PortalUser["role"] })}>{Object.entries(roleLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><button className="primary" disabled={!editable} onClick={() => void add()}>+ Додати учасника</button></div><div className="user-library-table">{payload.users.map((user) => <div key={user.id}><UserAvatar user={user} /><label><span>Ім’я</span><input disabled={!editable} defaultValue={user.name} onBlur={(event) => { const value = event.target.value.trim(); if (value && value !== user.name) void mutate("Оновлено ім’я учасника", user.id, (state) => { state.users.find((item) => item.id === user.id)!.name = value; }); }} /></label><label><span>Google-акаунт</span><input disabled={!editable} defaultValue={user.email} onBlur={(event) => { const value = event.target.value.trim(); if (value && value !== user.email) void mutate("Оновлено адресу учасника", user.id, (state) => { state.users.find((item) => item.id === user.id)!.email = value; }); }} /></label><label><span>Роль доступу</span><select disabled={!editable} value={user.role} onChange={(event) => void mutate("Змінено роль учасника", user.id, (state) => { state.users.find((item) => item.id === user.id)!.role = event.target.value as PortalUser["role"]; })}>{Object.entries(roleLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><button disabled={!editable} className={user.active ? "user-active-button" : "user-inactive-button"} onClick={() => void mutate(user.active ? "Учасника вимкнено" : "Учасника активовано", user.id, (state) => { const target = state.users.find((item) => item.id === user.id)!; target.active = !target.active; })}>{user.active ? "Активний" : "Вимкнено"}</button></div>)}</div></section>;
+  const add = async () => {
+    if (!newUser.name.trim() || !newUser.email.trim()) return setNotice("Вкажіть ім’я та корпоративну адресу");
+    const password = newUser.password;
+    const ok = await manage({ action: "create", ...newUser });
+    if (ok) {
+      setIssued({ name: newUser.name.trim(), password });
+      setNewUser({ name: "", email: "", role: "executor", password: generatePassword() });
+    }
+  };
+  const resetPassword = async (user: PortalUser) => {
+    const password = generatePassword();
+    const ok = await manage({ action: "reset_password", userId: user.id, password });
+    if (ok) setIssued({ name: user.name, password });
+  };
+  const canEdit = (user: PortalUser) => editable && user.role !== "owner" && (payload.currentUser.role === "owner" || user.role !== "admin");
+  return <section className="panel user-library"><div className="panel-head"><div><span>Користувачі та доступ</span><h2>Редактор учасників</h2></div><div className="library-head-meta"><small>{editable ? "Створення доступу, ролей і паролів" : "Перегляд без редагування"}</small><b className="count">{payload.users.filter((user) => user.active).length}</b></div></div>{issued && <div className="password-reveal"><div><span>Новий пароль для {issued.name}</span><strong>{issued.password}</strong><small>Скопіюйте зараз: після закриття цей пароль більше не показуватиметься.</small></div><button onClick={() => void navigator.clipboard.writeText(issued.password)}>Копіювати</button><button className="secondary" onClick={() => setIssued(null)}>Закрити</button></div>}<div className="library-add"><input disabled={!editable || busy} value={newUser.name} onChange={(event) => setNewUser({ ...newUser, name: event.target.value })} placeholder="Ім’я та прізвище" /><input disabled={!editable || busy} type="email" value={newUser.email} onChange={(event) => setNewUser({ ...newUser, email: event.target.value })} placeholder="name@pravdop.com" /><select disabled={!editable || busy} value={newUser.role} onChange={(event) => setNewUser({ ...newUser, role: event.target.value as PortalUser["role"] })}>{roleOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><div className="generated-password"><input readOnly value={newUser.password} aria-label="Згенерований пароль" /><button type="button" disabled={!editable || busy} onClick={() => setNewUser({ ...newUser, password: generatePassword() })}>↻</button></div><button className="primary" disabled={!editable || busy} onClick={() => void add()}>+ Створити доступ</button></div><div className="user-library-table">{payload.users.map((user) => { const rowEditable = canEdit(user); return <div key={user.id}><UserAvatar user={user} /><label><span>Ім’я</span><input disabled={!rowEditable || busy} defaultValue={user.name} onBlur={(event) => { const value = event.target.value.trim(); if (value && value !== user.name) void manage({ action: "update", userId: user.id, name: value, email: user.email, role: user.role }); }} /></label><label><span>Логін</span><input disabled={!rowEditable || busy} type="email" defaultValue={user.email} onBlur={(event) => { const value = event.target.value.trim(); if (value && value !== user.email) void manage({ action: "update", userId: user.id, name: user.name, email: value, role: user.role }); }} /></label><label><span>Роль доступу</span><select disabled={!rowEditable || busy} value={user.role} onChange={(event) => void manage({ action: "update", userId: user.id, name: user.name, email: user.email, role: event.target.value })}>{user.role === "owner" && <option value="owner">{roleLabels.owner}</option>}{roleOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><button disabled={!rowEditable || busy} className="password-reset-button" onClick={() => void resetPassword(user)}>Новий пароль</button><button disabled={!rowEditable || busy || user.id === payload.currentUser.id} className={user.active ? "user-active-button" : "user-inactive-button"} onClick={() => void manage({ action: "toggle_active", userId: user.id })}>{user.active ? "Активний" : "Вимкнено"}</button></div>; })}</div></section>;
 }
 
 function ModalShell({ title, subtitle, close, children, footer }: { title: string; subtitle: string; close: () => void; children: React.ReactNode; footer: React.ReactNode }) {
@@ -785,7 +850,7 @@ function NodeModal({ node, setNode, nodes, users, close, save }: { node: WorkNod
   const requiredParent = parentKind(node.kind);
   const validParents = requiredParent ? nodes.filter((item) => item.kind === requiredParent && !item.archived && item.id !== node.id) : [];
   return <ModalShell title={`${node.code} · ${node.title || "Новий об’єкт"}`} subtitle={kindLabels[node.kind]} close={close} footer={<><button onClick={close}>Скасувати</button><button className="primary" onClick={save}>Зберегти</button></>}>
-    <div className="form-grid"><Field label="Код"><input value={node.code} onChange={(event) => update("code", event.target.value)} /></Field><Field label="Тип"><select value={node.kind} onChange={(event) => { const kind = event.target.value as NodeKind; const required = parentKind(kind); setNode({ ...node, kind, parentId: required ? nodes.find((item) => item.kind === required && !item.archived)?.id || null : null }); }}><option value="goal">Стратегічна ціль</option><option value="cycle">Управлінський цикл</option><option value="subcycle">Підцикл</option><option value="task">Завдання</option></select></Field>{requiredParent && <Field wide label={`Батьківський рівень · ${kindLabels[requiredParent]}`}><select value={node.parentId || ""} onChange={(event) => update("parentId", event.target.value)}><option value="">Оберіть батьківську УО</option>{validParents.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.title}</option>)}</select></Field>}<Field wide label="Назва"><input value={node.title} onChange={(event) => update("title", event.target.value)} /></Field><Field wide label="Опис"><textarea value={node.description} onChange={(event) => update("description", event.target.value)} /></Field><Field wide label="Готовий результат"><textarea value={node.result} onChange={(event) => update("result", event.target.value)} /></Field><Field wide label="Що не є результатом"><textarea value={node.nonResult} onChange={(event) => update("nonResult", event.target.value)} /></Field><Field wide label="Критерій приймання"><textarea value={node.acceptanceCriteria} onChange={(event) => update("acceptanceCriteria", event.target.value)} /></Field>
+    <div className="form-grid"><Field label="Код"><input value={node.code} onChange={(event) => update("code", event.target.value)} /></Field><Field label="Тип"><select value={node.kind} onChange={(event) => { const kind = event.target.value as NodeKind; const required = parentKind(kind); setNode({ ...node, kind, parentId: required ? nodes.find((item) => item.kind === required && !item.archived)?.id || null : null }); }}><option value="goal">Стратегічна ціль</option><option value="cycle">Управлінський цикл</option><option value="subcycle">Підцикл</option><option value="task">Завдання</option></select></Field>{requiredParent && <Field wide label={`Батьківський рівень · ${kindLabels[requiredParent]}`}><select value={node.parentId || ""} onChange={(event) => update("parentId", event.target.value)}><option value="">Оберіть батьківський рівень</option>{validParents.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.title}</option>)}</select></Field>}<Field wide label="Назва"><input value={node.title} onChange={(event) => update("title", event.target.value)} /></Field><Field wide label="Опис"><textarea value={node.description} onChange={(event) => update("description", event.target.value)} /></Field><Field wide label="Готовий результат"><textarea value={node.result} onChange={(event) => update("result", event.target.value)} /></Field><Field wide label="Що не є результатом"><textarea value={node.nonResult} onChange={(event) => update("nonResult", event.target.value)} /></Field><Field wide label="Критерій приймання"><textarea value={node.acceptanceCriteria} onChange={(event) => update("acceptanceCriteria", event.target.value)} /></Field>
       <Field label="Власник результату"><select value={node.ownerId} onChange={(event) => update("ownerId", event.target.value)}>{users.filter((user) => user.active).map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></Field><Field label="Виконавець"><select value={node.assigneeId} onChange={(event) => update("assigneeId", event.target.value)}>{users.filter((user) => user.active).map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></Field><Field label="Приймає результат"><select value={node.acceptorId} onChange={(event) => update("acceptorId", event.target.value)}>{users.filter((user) => user.active).map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></Field><Field label="Пріоритет"><select value={node.priority} onChange={(event) => update("priority", event.target.value as WorkNode["priority"])}><option value="critical">Критичний</option><option value="high">Високий</option><option value="normal">Нормальний</option><option value="low">Низький</option></select></Field>
       <Field wide label="Учасники"><div className="participant-picker">{users.filter((user) => user.active).map((user) => <label key={user.id}><input type="checkbox" checked={node.participantIds.includes(user.id)} onChange={(event) => update("participantIds", event.target.checked ? [...node.participantIds, user.id] : node.participantIds.filter((id) => id !== user.id))} /><span>{user.name}</span></label>)}</div></Field>
       <Field label="Початок"><input type="date" value={node.plannedStart} onChange={(event) => update("plannedStart", event.target.value)} /></Field><Field label="Завершення"><input type="date" value={node.plannedEnd} onChange={(event) => update("plannedEnd", event.target.value)} /></Field><Field label="Прогноз"><input type="date" value={node.forecastEnd} onChange={(event) => update("forecastEnd", event.target.value)} /></Field><Field label="Прогрес, %"><input type="number" min="0" max="100" value={node.progress} onChange={(event) => update("progress", Number(event.target.value))} /></Field><Field label="Спосіб початку"><select value={node.startMode} onChange={(event) => update("startMode", event.target.value as StartMode)}>{Object.entries(startLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field><Field label="Періодичність координації"><input value={node.coordinationCadence} onChange={(event) => update("coordinationCadence", event.target.value)} /></Field>

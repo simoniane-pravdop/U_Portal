@@ -10,7 +10,7 @@ export type LifecycleStatus =
   | "cancelled";
 export type HealthStatus = "normal" | "risk" | "blocked";
 export type StartMode = "with_parent" | "manual_capacity" | "fixed_date" | "after_dependency";
-export type PortalRole = "admin" | "goal_owner" | "cycle_owner" | "coordinator" | "executor" | "viewer";
+export type PortalRole = "owner" | "admin" | "goal_owner" | "cycle_owner" | "coordinator" | "executor" | "viewer";
 export type SyncRule = "portal" | "asana" | "manual";
 
 export type PortalUser = {
@@ -208,7 +208,7 @@ export type PortalState = {
 };
 
 export type SessionUser = PortalUser & {
-  authMode: "local" | "google" | "platform";
+  authMode: "password" | "google" | "platform";
 };
 
 export type PortalPayload = PortalState & {

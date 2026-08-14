@@ -18,6 +18,25 @@ export const portalSessions = sqliteTable("portal_sessions", {
   createdAt: text("created_at").notNull(),
 });
 
+export const portalCredentials = sqliteTable("portal_credentials", {
+  userId: text("user_id").primaryKey(),
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  passwordSalt: text("password_salt").notNull(),
+  passwordIterations: integer("password_iterations").notNull(),
+  mustChangePassword: integer("must_change_password", { mode: "boolean" }).notNull().default(false),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+  createdBy: text("created_by").notNull(),
+});
+
+export const portalLoginAttempts = sqliteTable("portal_login_attempts", {
+  identifier: text("identifier").primaryKey(),
+  failedCount: integer("failed_count").notNull().default(0),
+  firstFailedAt: text("first_failed_at").notNull(),
+  lockedUntil: text("locked_until").notNull().default(""),
+});
+
 export const asanaConnections = sqliteTable("asana_connections", {
   userId: text("user_id").primaryKey(),
   asanaUserGid: text("asana_user_gid").notNull(),

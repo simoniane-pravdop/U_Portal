@@ -24,34 +24,22 @@ test("server-renders the management portal shell", async () => {
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
 });
 
-test("pilot data has a valid hierarchy and management controls", async () => {
+test("initial state has the two authorized administrators and no test management data", async () => {
   const seed = JSON.parse(await readFile(new URL("../app/data/seed.json", import.meta.url), "utf8"));
-  const ids = new Set(seed.nodes.map((node) => node.id));
-  const codes = seed.nodes.map((node) => node.code);
-  const userIds = new Set(seed.users.map((user) => user.id));
-  assert.equal(ids.size, seed.nodes.length);
-  assert.equal(new Set(codes).size, codes.length);
-  assert.ok(seed.nodes.some((node) => node.code === "S1"));
-  assert.ok(seed.nodes.some((node) => node.code === "P1.1" && node.kind === "subcycle"));
-  assert.ok(seed.nodes.some((node) => node.code === "P1.1.4" && node.startMode === "manual_capacity"));
-  for (const node of seed.nodes) {
-    if (node.parentId) assert.ok(ids.has(node.parentId), `Unknown parent for ${node.code}`);
-    assert.ok(userIds.has(node.ownerId), `Unknown owner for ${node.code}`);
-    assert.ok(userIds.has(node.assigneeId), `Unknown assignee for ${node.code}`);
-    assert.ok(userIds.has(node.acceptorId), `Unknown acceptor for ${node.code}`);
-    assert.equal("intermediateResult" in node, false);
-    assert.ok(node.asana?.rules?.title);
-  }
-  for (const dependency of seed.dependencies) {
-    assert.ok(ids.has(dependency.predecessorId));
-    assert.ok(ids.has(dependency.successorId));
-    assert.notEqual(dependency.predecessorId, dependency.successorId);
-  }
-  for (const blocker of seed.blockers) {
-    assert.ok(ids.has(blocker.nodeId));
-    assert.ok(blocker.escalationToId);
-    assert.ok(blocker.decisionDue);
-  }
+  assert.equal(seed.version, 2);
+  assert.equal(seed.users.length, 2);
+  assert.deepEqual(seed.users.map(({ name, email, role }) => ({ name, email, role })), [
+    { name: "Володимир Гурлов", email: "vg@pravdop.com", role: "owner" },
+    { name: "Едгар Сімонян", email: "simonian.e@pravdop.com", role: "admin" },
+  ]);
+  assert.ok(seed.users.every((user) => user.active));
+  assert.deepEqual(seed.nodes, []);
+  assert.deepEqual(seed.dependencies, []);
+  assert.deepEqual(seed.blockers, []);
+  assert.deepEqual(seed.decisions, []);
+  assert.deepEqual(seed.acceptances, []);
+  assert.deepEqual(seed.coordinations, []);
+  assert.doesNotMatch(JSON.stringify(seed), /password|Test_/i);
 });
 
 test("durable storage and integration bindings are declared", async () => {
@@ -62,23 +50,46 @@ test("durable storage and integration bindings are declared", async () => {
   assert.match(envExample, /GOOGLE_CLIENT_ID/);
   assert.match(envExample, /ASANA_CLIENT_ID/);
   assert.match(envExample, /TOKEN_ENCRYPTION_KEY/);
+  assert.match(envExample, /PORTAL_OWNER_CREDENTIAL/);
+  assert.match(envExample, /PORTAL_ADMIN_CREDENTIAL/);
   const migration = await readFile(new URL("../db/migrations/0001_management_portal.sql", import.meta.url), "utf8");
   assert.match(migration, /CREATE TABLE `portal_state`/);
   assert.match(migration, /CREATE TABLE `asana_connections`/);
+  const credentialMigration = await readFile(new URL("../db/migrations/0002_portal_credentials.sql", import.meta.url), "utf8");
+  assert.match(credentialMigration, /CREATE TABLE `portal_credentials`/);
+  assert.match(credentialMigration, /CREATE TABLE `portal_login_attempts`/);
 });
 
-test("management unit workflow separates structure, work, dashboard, and settings", async () => {
+test("management workflow separates structure, work, dashboard, settings, and access", async () => {
   const source = await readFile(new URL("../app/PortalApp.tsx", import.meta.url), "utf8");
-  assert.match(source, /Дерево управлінських одиниць/);
+  assert.match(source, /Дерево цілей, циклів і завдань/);
   assert.match(source, /Зберегти стан і подати звіт/);
   assert.match(source, /Результати, стани та управлінська реакція/);
   assert.match(source, /Редактор учасників/);
+  assert.match(source, /Створити доступ/);
+  assert.match(source, /Новий пароль/);
+  assert.match(source, /api\/auth\/password/);
+  assert.match(source, /api\/admin\/users/);
   assert.match(source, /Створити задачу в Asana/);
   assert.match(source, /recalculateHierarchy/);
   assert.match(source, /tree-row-menu/);
   assert.match(source, /mobile-tree-switch/);
   assert.match(source, /compact-tree/);
+  assert.doesNotMatch(source, /Дерево УО|Створити УО|Паспорт УО|Нижчі УО|Тут виконується УО/);
   assert.doesNotMatch(source, /id: "integrations"/);
+});
+
+test("password authentication uses slow hashing, rate limiting, and no committed passwords", async () => {
+  const server = await readFile(new URL("../app/lib/server.ts", import.meta.url), "utf8");
+  const login = await readFile(new URL("../app/api/auth/password/route.ts", import.meta.url), "utf8");
+  const users = await readFile(new URL("../app/api/admin/users/route.ts", import.meta.url), "utf8");
+  const combined = `${server}\n${login}\n${users}`;
+  assert.match(server, /PBKDF2/);
+  assert.match(server, /210_000/);
+  assert.match(login, /MAX_FAILURES = 5/);
+  assert.match(login, /portal_login_attempts/);
+  assert.match(users, /target\?\.role === "owner"/);
+  assert.doesNotMatch(combined, /PORTAL_(OWNER|ADMIN)_PASSWORD\s*=/);
 });
 
 test("compact laptop and mobile layouts are declared", async () => {

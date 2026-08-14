@@ -5,6 +5,8 @@ import type { PortalState, PortalUser, SessionUser } from "../types";
 type RuntimeEnv = {
   DB?: D1Database;
   FILES?: R2Bucket;
+  PORTAL_OWNER_CREDENTIAL?: string;
+  PORTAL_ADMIN_CREDENTIAL?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
   GOOGLE_ALLOWED_DOMAIN?: string;
@@ -77,6 +79,23 @@ const schemaStatements = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_portal_sessions_expires_at
     ON portal_sessions(expires_at)`,
+  `CREATE TABLE IF NOT EXISTS portal_credentials (
+    user_id TEXT PRIMARY KEY,
+    email TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    password_salt TEXT NOT NULL,
+    password_iterations INTEGER NOT NULL,
+    must_change_password INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    created_by TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS portal_login_attempts (
+    identifier TEXT PRIMARY KEY,
+    failed_count INTEGER NOT NULL DEFAULT 0,
+    first_failed_at TEXT NOT NULL,
+    locked_until TEXT NOT NULL DEFAULT ''
+  )`,
   `CREATE TABLE IF NOT EXISTS asana_connections (
     user_id TEXT PRIMARY KEY,
     asana_user_gid TEXT NOT NULL,
@@ -111,6 +130,23 @@ export function seedState(): PortalState {
   return structuredClone(seed) as PortalState;
 }
 
+function cleanInitialState(state: PortalState, revision: number): PortalState {
+  const clean = seedState();
+  clean.version = 2;
+  clean.revision = revision;
+  clean.audit = [
+    {
+      id: crypto.randomUUID(),
+      at: new Date().toISOString(),
+      by: "Система",
+      action: "Очищено тестові дані та створено початкових адміністраторів",
+      entityId: "portal",
+    },
+  ];
+  clean.settings = { ...state.settings, ...clean.settings };
+  return clean;
+}
+
 export async function loadState(): Promise<{ state: PortalState; storage: "database" | "memory" }> {
   const db = await database();
   if (!db) return { state: seedState(), storage: "memory" };
@@ -119,8 +155,19 @@ export async function loadState(): Promise<{ state: PortalState; storage: "datab
     .bind("main")
     .first<{ payload: string; revision: number }>();
   if (row?.payload) {
-    const state = JSON.parse(row.payload) as PortalState;
-    state.revision = row.revision;
+    let state = JSON.parse(row.payload) as PortalState;
+    if ((state.version || 1) < 2) {
+      state = cleanInitialState(state, row.revision + 1);
+      const now = new Date().toISOString();
+      await db.batch([
+        db.prepare("UPDATE portal_state SET payload = ?, revision = ?, updated_at = ?, updated_by = ? WHERE id = ?")
+          .bind(JSON.stringify(state), state.revision, now, "Система", "main"),
+        db.prepare("DELETE FROM portal_sessions"),
+        db.prepare("DELETE FROM portal_credentials WHERE user_id NOT IN (?, ?)").bind("u-gurlov", "u-edhar"),
+      ]);
+    } else {
+      state.revision = row.revision;
+    }
     return { state, storage: "database" };
   }
   const state = seedState();
@@ -136,6 +183,77 @@ async function sha256(value: string) {
   const bytes = new TextEncoder().encode(value);
   const digest = await crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+const PASSWORD_ITERATIONS = 210_000;
+
+function bytesToBase64(bytes: Uint8Array) {
+  return btoa(String.fromCharCode(...bytes));
+}
+
+function base64ToBytes(value: string) {
+  return Uint8Array.from(atob(value), (character) => character.charCodeAt(0));
+}
+
+export type PasswordCredential = {
+  passwordHash: string;
+  passwordSalt: string;
+  passwordIterations: number;
+};
+
+export async function hashPassword(password: string, iterations = PASSWORD_ITERATIONS): Promise<PasswordCredential> {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", hash: "SHA-256", salt, iterations },
+    key,
+    256,
+  );
+  return {
+    passwordHash: bytesToBase64(new Uint8Array(bits)),
+    passwordSalt: bytesToBase64(salt),
+    passwordIterations: iterations,
+  };
+}
+
+export async function verifyPassword(password: string, credential: PasswordCredential) {
+  if (!credential.passwordHash || !credential.passwordSalt || credential.passwordIterations < 100_000) return false;
+  try {
+    const salt = base64ToBytes(credential.passwordSalt);
+    const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]);
+    const bits = new Uint8Array(await crypto.subtle.deriveBits(
+      { name: "PBKDF2", hash: "SHA-256", salt, iterations: credential.passwordIterations },
+      key,
+      256,
+    ));
+    const expected = base64ToBytes(credential.passwordHash);
+    if (bits.length !== expected.length) return false;
+    let mismatch = 0;
+    for (let index = 0; index < bits.length; index += 1) mismatch |= bits[index] ^ expected[index];
+    return mismatch === 0;
+  } catch {
+    return false;
+  }
+}
+
+export function parsePasswordCredential(value?: string): PasswordCredential | null {
+  const [scheme, iterations, salt, hash, ...rest] = (value || "").split(":");
+  const count = Number(iterations);
+  if (scheme !== "pbkdf2" || rest.length || !salt || !hash || !Number.isInteger(count)) return null;
+  return { passwordHash: hash, passwordSalt: salt, passwordIterations: count };
+}
+
+export function bootstrapCredential(user: PortalUser) {
+  const value = user.role === "owner" ? runtimeEnv().PORTAL_OWNER_CREDENTIAL : user.role === "admin" ? runtimeEnv().PORTAL_ADMIN_CREDENTIAL : undefined;
+  return parsePasswordCredential(value);
+}
+
+export function validatePassword(password: string) {
+  if (password.length < 12) return "Пароль має містити щонайменше 12 символів";
+  if (!/[a-zа-яіїєґ]/u.test(password) || !/[A-ZА-ЯІЇЄҐ]/u.test(password) || !/\d/.test(password) || !/[^\p{L}\p{N}]/u.test(password)) {
+    return "Пароль має містити великі й малі літери, цифру та спеціальний символ";
+  }
+  return "";
 }
 
 export function randomToken(bytes = 32) {
@@ -162,12 +280,6 @@ export async function createSession(request: Request, user: PortalUser, authMode
 export async function currentUser(request: Request, state?: PortalState): Promise<SessionUser | null> {
   const loaded = state || (await loadState()).state;
   const cookies = parseCookies(request);
-  if (isLocal(request)) {
-    const id = cookies.portal_local_user || "u-edhar";
-    const user = loaded.users.find((candidate) => candidate.id === id && candidate.active) || loaded.users[0];
-    return user ? { ...user, authMode: "local" } : null;
-  }
-
   const platformEmail = request.headers.get("oai-authenticated-user-email");
   if (platformEmail) {
     const user = loaded.users.find((candidate) => candidate.email.toLowerCase() === platformEmail.toLowerCase());
@@ -189,7 +301,7 @@ export async function currentUser(request: Request, state?: PortalState): Promis
 }
 
 export function mayEdit(user: SessionUser, nodeOwnerId?: string) {
-  return ["admin", "goal_owner", "cycle_owner", "coordinator"].includes(user.role) || user.id === nodeOwnerId;
+  return ["owner", "admin", "goal_owner", "cycle_owner", "coordinator"].includes(user.role) || user.id === nodeOwnerId;
 }
 
 export function jsonError(message: string, status: number) {
