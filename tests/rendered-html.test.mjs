@@ -82,6 +82,9 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /tree-row-menu/);
   assert.match(source, /mobile-tree-switch/);
   assert.match(source, /compact-tree/);
+  assert.match(source, /return \["cycle", "subcycle"\]/);
+  assert.match(source, /Додати завдання/);
+  assert.match(source, /Завдання можна включити безпосередньо в управлінський цикл або в його підцикл/);
   assert.doesNotMatch(source, /Дерево УО|Створити УО|Паспорт УО|Нижчі УО|Тут виконується УО/);
   assert.doesNotMatch(source, /id: "integrations"/);
 });
