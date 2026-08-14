@@ -7,6 +7,9 @@ const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
   "00000000-0000-4000-8000-000000000000";
 
 const { d1, r2 } = hostingConfig;
+const cloudflareDatabaseId = process.env.CLOUDFLARE_D1_DATABASE_ID?.trim();
+const cloudflareR2BucketName = process.env.CLOUDFLARE_R2_BUCKET_NAME?.trim();
+const isCloudflareDeployment = Boolean(cloudflareDatabaseId);
 
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
@@ -18,16 +21,20 @@ const localBindingConfig = {
     ? [
         {
           binding: d1,
-          database_name: "site-creator-d1",
-          database_id: SITE_CREATOR_PLACEHOLDER_DATABASE_ID,
+          database_name: isCloudflareDeployment ? "u-portal-db" : "site-creator-d1",
+          database_id:
+            cloudflareDatabaseId || SITE_CREATOR_PLACEHOLDER_DATABASE_ID,
         },
       ]
     : [],
-  r2_buckets: r2
+  // Keep a local Miniflare bucket for development. Remote deployments only
+  // receive R2 when an explicit bucket name is provided, so a free pilot can
+  // run without enabling Cloudflare's usage-based R2 subscription.
+  r2_buckets: r2 && (!isCloudflareDeployment || cloudflareR2BucketName)
     ? [
         {
           binding: r2,
-          bucket_name: "site-creator-r2",
+          bucket_name: cloudflareR2BucketName || "site-creator-r2",
         },
       ]
     : [],
