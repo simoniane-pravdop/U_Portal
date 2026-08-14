@@ -42,6 +42,7 @@ export async function POST(request: Request) {
   const actor = await currentUser(request, current);
   if (!actor) return jsonError("Потрібен вхід", 401);
   if (!['owner', 'admin'].includes(actor.role)) return jsonError("Керування доступом дозволено лише власнику або адміністратору порталу", 403);
+  if (!runtimeEnv().PORTAL_PASSWORD_PEPPER) return jsonError("Захист паролів ще не налаштовано", 503);
 
   const body = (await request.json().catch(() => ({}))) as UserAction;
   if (!body.action) return jsonError("Не вказано дію", 400);

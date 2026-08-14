@@ -4,6 +4,7 @@ import {
   database,
   jsonError,
   loadState,
+  runtimeEnv,
   verifyPassword,
 } from "../../../lib/server";
 
@@ -37,6 +38,7 @@ export async function POST(request: Request) {
   const email = body.email?.trim().toLowerCase() || "";
   const password = body.password || "";
   if (!email || !password) return jsonError("Введіть корпоративну адресу та пароль", 400);
+  if (!runtimeEnv().PORTAL_PASSWORD_PEPPER) return jsonError("Захист паролів ще не налаштовано", 503);
 
   const db = await database();
   if (!db) return jsonError("Сховище облікових записів недоступне", 503);

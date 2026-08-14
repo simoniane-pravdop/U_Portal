@@ -52,6 +52,7 @@ test("durable storage and integration bindings are declared", async () => {
   assert.match(envExample, /TOKEN_ENCRYPTION_KEY/);
   assert.match(envExample, /PORTAL_OWNER_CREDENTIAL/);
   assert.match(envExample, /PORTAL_ADMIN_CREDENTIAL/);
+  assert.match(envExample, /PORTAL_PASSWORD_PEPPER/);
   const migration = await readFile(new URL("../db/migrations/0001_management_portal.sql", import.meta.url), "utf8");
   assert.match(migration, /CREATE TABLE `portal_state`/);
   assert.match(migration, /CREATE TABLE `asana_connections`/);
@@ -85,7 +86,9 @@ test("password authentication uses slow hashing, rate limiting, and no committed
   const users = await readFile(new URL("../app/api/admin/users/route.ts", import.meta.url), "utf8");
   const combined = `${server}\n${login}\n${users}`;
   assert.match(server, /PBKDF2/);
-  assert.match(server, /210_000/);
+  assert.match(server, /100_000/);
+  assert.match(server, /passwordMaterial/);
+  assert.match(server, /HMAC/);
   assert.match(login, /MAX_FAILURES = 5/);
   assert.match(login, /portal_login_attempts/);
   assert.match(users, /target\?\.role === "owner"/);

@@ -7,6 +7,7 @@ type RuntimeEnv = {
   FILES?: R2Bucket;
   PORTAL_OWNER_CREDENTIAL?: string;
   PORTAL_ADMIN_CREDENTIAL?: string;
+  PORTAL_PASSWORD_PEPPER?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
   GOOGLE_ALLOWED_DOMAIN?: string;
@@ -185,7 +186,10 @@ async function sha256(value: string) {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-const PASSWORD_ITERATIONS = 210_000;
+// Cloudflare workerd caps PBKDF2 at 100,000 iterations. A separate 256-bit
+// Worker secret is mixed into every password before derivation so a D1 leak
+// alone is insufficient for offline password verification.
+const PASSWORD_ITERATIONS = 100_000;
 
 function bytesToBase64(bytes: Uint8Array) {
   return btoa(String.fromCharCode(...bytes));
@@ -201,9 +205,16 @@ export type PasswordCredential = {
   passwordIterations: number;
 };
 
+async function passwordMaterial(password: string) {
+  const pepper = runtimeEnv().PORTAL_PASSWORD_PEPPER;
+  if (!pepper) throw new Error("PORTAL_PASSWORD_PEPPER is not configured");
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(pepper), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(password)));
+}
+
 export async function hashPassword(password: string, iterations = PASSWORD_ITERATIONS): Promise<PasswordCredential> {
   const salt = crypto.getRandomValues(new Uint8Array(16));
-  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]);
+  const key = await crypto.subtle.importKey("raw", await passwordMaterial(password), "PBKDF2", false, ["deriveBits"]);
   const bits = await crypto.subtle.deriveBits(
     { name: "PBKDF2", hash: "SHA-256", salt, iterations },
     key,
@@ -217,10 +228,10 @@ export async function hashPassword(password: string, iterations = PASSWORD_ITERA
 }
 
 export async function verifyPassword(password: string, credential: PasswordCredential) {
-  if (!credential.passwordHash || !credential.passwordSalt || credential.passwordIterations < 100_000) return false;
+  if (!credential.passwordHash || !credential.passwordSalt || credential.passwordIterations !== PASSWORD_ITERATIONS) return false;
   try {
     const salt = base64ToBytes(credential.passwordSalt);
-    const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]);
+    const key = await crypto.subtle.importKey("raw", await passwordMaterial(password), "PBKDF2", false, ["deriveBits"]);
     const bits = new Uint8Array(await crypto.subtle.deriveBits(
       { name: "PBKDF2", hash: "SHA-256", salt, iterations: credential.passwordIterations },
       key,
