@@ -208,7 +208,9 @@ export type PasswordCredential = {
 async function passwordMaterial(password: string) {
   const pepper = runtimeEnv().PORTAL_PASSWORD_PEPPER;
   if (!pepper) throw new Error("PORTAL_PASSWORD_PEPPER is not configured");
-  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(pepper), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const pepperBytes = base64ToBytes(pepper);
+  if (pepperBytes.length !== 32) throw new Error("PORTAL_PASSWORD_PEPPER must contain 32 bytes");
+  const key = await crypto.subtle.importKey("raw", pepperBytes, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   return new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(password)));
 }
 
