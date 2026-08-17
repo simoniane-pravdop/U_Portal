@@ -69,6 +69,17 @@ export async function POST(request: Request) {
   collectChanged(current.decisions, body.state.decisions, (item) => [item.nodeId]);
   collectChanged(current.acceptances, body.state.acceptances, (item) => [item.nodeId]);
   collectChanged(current.coordinations, body.state.coordinations, (item) => [item.subcycleId]);
+  const discussionIds = new Set([...(current.discussions || []).map((item) => item.id), ...(body.state.discussions || []).map((item) => item.id)]);
+  for (const id of discussionIds) {
+    const before = (current.discussions || []).find((item) => item.id === id);
+    const after = (body.state.discussions || []).find((item) => item.id === id);
+    if (JSON.stringify(before) === JSON.stringify(after)) continue;
+    const nodeId = after?.nodeId || before?.nodeId;
+    const node = current.nodes.find((candidate) => candidate.id === nodeId) || body.state.nodes.find((candidate) => candidate.id === nodeId);
+    if (!node || !(mayEdit(user, node.ownerId) || node.assigneeId === user.id || node.acceptorId === user.id || node.participantIds.includes(user.id))) {
+      return jsonError("Недостатньо повноважень для повідомлення в цій картці", 403);
+    }
+  }
   for (const id of affectedNodeIds) {
     const node = current.nodes.find((candidate) => candidate.id === id) || body.state.nodes.find((candidate) => candidate.id === id);
     if (!node || !(mayEdit(user, node.ownerId) || node.assigneeId === user.id || node.acceptorId === user.id)) {
@@ -80,6 +91,13 @@ export async function POST(request: Request) {
       { error: "Дані вже змінив інший користувач", currentRevision: current.revision },
       { status: 409, headers: { "Cache-Control": "no-store" } },
     );
+  }
+
+  const db = await database();
+  if (db && body.action?.startsWith("Оновлено ") && body.entityId) {
+    const now = new Date().toISOString();
+    const lock = await db.prepare("SELECT user_id, user_name, expires_at FROM portal_edit_locks WHERE entity_id = ? AND expires_at > ?").bind(body.entityId, now).first<{ user_id: string; user_name: string; expires_at: string }>();
+    if (lock && lock.user_id !== user.id) return jsonError(`${lock.user_name} зараз редагує цю картку. Дочекайтеся завершення або оновіть дані.`, 423);
   }
 
   const next = body.state;
@@ -96,16 +114,19 @@ export async function POST(request: Request) {
     ...(Array.isArray(next.audit) ? next.audit : []),
   ].slice(0, 500);
 
-  const db = await database();
   if (db) {
     const now = new Date().toISOString();
-    const result = await db
-      .prepare(
+    const stateStatement = db.prepare(
         "UPDATE portal_state SET payload = ?, revision = ?, updated_at = ?, updated_by = ? WHERE id = ? AND revision = ?",
       )
-      .bind(JSON.stringify(next), next.revision, now, user.email, "main", current.revision)
-      .run();
-    if (!result.meta.changes) return jsonError("Конфлікт одночасного редагування", 409);
+      .bind(JSON.stringify(next), next.revision, now, user.email, "main", current.revision);
+    const versions = changedNodeIds.map((id) => {
+      const snapshot = next.nodes.find((node) => node.id === id);
+      return db.prepare("INSERT INTO portal_entity_versions (id, entity_id, revision, user_id, user_name, action, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+        .bind(crypto.randomUUID(), id, next.revision, user.id, user.name, body.action || "Оновлено дані порталу", JSON.stringify(snapshot || null), now);
+    });
+    const results = await db.batch([stateStatement, ...versions]);
+    if (!results[0].meta.changes) return jsonError("Конфлікт одночасного редагування", 409);
   }
 
   if (next.settings.telegramPlanned) {

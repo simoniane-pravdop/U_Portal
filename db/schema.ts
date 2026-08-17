@@ -84,3 +84,22 @@ export const telegramEvents = sqliteTable("telegram_events", {
   summary: text("summary").notNull(),
   createdAt: text("created_at").notNull(),
 });
+
+export const portalEditLocks = sqliteTable("portal_edit_locks", {
+  entityId: text("entity_id").primaryKey(),
+  userId: text("user_id").notNull(),
+  userName: text("user_name").notNull(),
+  acquiredAt: text("acquired_at").notNull(),
+  expiresAt: text("expires_at").notNull(),
+});
+
+export const portalEntityVersions = sqliteTable("portal_entity_versions", {
+  id: text("id").primaryKey(),
+  entityId: text("entity_id").notNull(),
+  revision: integer("revision").notNull(),
+  userId: text("user_id").notNull(),
+  userName: text("user_name").notNull(),
+  action: text("action").notNull(),
+  payload: text("payload").notNull(),
+  createdAt: text("created_at").notNull(),
+});

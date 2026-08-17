@@ -39,6 +39,7 @@ test("initial state has the two authorized administrators and no test management
   assert.deepEqual(seed.decisions, []);
   assert.deepEqual(seed.acceptances, []);
   assert.deepEqual(seed.coordinations, []);
+  assert.deepEqual(seed.discussions, []);
   assert.doesNotMatch(JSON.stringify(seed), /password|Test_/i);
 });
 
@@ -64,6 +65,9 @@ test("durable storage and integration bindings are declared", async () => {
   const telegramMigration = await readFile(new URL("../db/migrations/0003_telegram_integration.sql", import.meta.url), "utf8");
   assert.match(telegramMigration, /CREATE TABLE `telegram_links`/);
   assert.match(telegramMigration, /CREATE TABLE `telegram_link_codes`/);
+  const collaborationMigration = await readFile(new URL("../db/migrations/0004_collaboration.sql", import.meta.url), "utf8");
+  assert.match(collaborationMigration, /CREATE TABLE `portal_edit_locks`/);
+  assert.match(collaborationMigration, /CREATE TABLE `portal_entity_versions`/);
 });
 
 test("management workflow separates structure, work, dashboard, settings, and access", async () => {
@@ -85,6 +89,12 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /return \["cycle", "subcycle"\]/);
   assert.match(source, /Додати завдання/);
   assert.match(source, /Завдання можна включити безпосередньо в управлінський цикл або в його підцикл/);
+  assert.match(source, /portal:node-draft/);
+  assert.match(source, /Дані автоматично оновлено/);
+  assert.match(source, /Питання, погодження та коментарі/);
+  assert.match(source, /Обрати ціль, цикл або завдання/);
+  assert.match(source, /Координація за циклами й підциклами/);
+  assert.match(source, /Статус Завдання|parent\.health = state\.blockers/);
   assert.doesNotMatch(source, /Дерево УО|Створити УО|Паспорт УО|Нижчі УО|Тут виконується УО/);
   assert.doesNotMatch(source, /id: "integrations"/);
 });
@@ -102,6 +112,7 @@ test("password authentication uses slow hashing, rate limiting, and no committed
   assert.match(login, /MAX_FAILURES = 5/);
   assert.match(login, /portal_login_attempts/);
   assert.match(users, /target\?\.role === "owner"/);
+  assert.doesNotMatch(users, /body\.expectedRevision !== current\.revision/);
   assert.doesNotMatch(combined, /PORTAL_(OWNER|ADMIN)_PASSWORD\s*=/);
 });
 

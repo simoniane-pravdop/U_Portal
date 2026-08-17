@@ -25,6 +25,7 @@
   "decisions": [],
   "acceptances": [],
   "coordinations": [],
+  "discussions": [],
   "audit": [
     {
       "id": "audit-initial-access",

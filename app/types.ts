@@ -178,6 +178,25 @@ export type CoordinationSnapshot = {
   createdAt: string;
 };
 
+export type DiscussionMessage = {
+  id: string;
+  nodeId: string;
+  authorId: string;
+  text: string;
+  kind: "comment" | "question" | "approval" | "system";
+  createdAt: string;
+  resolvedAt?: string;
+  resolvedBy?: string;
+};
+
+export type EditingLock = {
+  entityId: string;
+  userId: string;
+  userName: string;
+  acquiredAt: string;
+  expiresAt: string;
+};
+
 export type AuditEntry = {
   id: string;
   at: string;
@@ -196,6 +215,7 @@ export type PortalState = {
   decisions: Decision[];
   acceptances: Acceptance[];
   coordinations: CoordinationSnapshot[];
+  discussions: DiscussionMessage[];
   audit: AuditEntry[];
   settings: {
     organizationName: string;

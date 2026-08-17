@@ -46,7 +46,6 @@ export async function POST(request: Request) {
 
   const body = (await request.json().catch(() => ({}))) as UserAction;
   if (!body.action) return jsonError("Не вказано дію", 400);
-  if (body.expectedRevision !== current.revision) return jsonError("Дані вже змінив інший користувач", 409);
   const db = await database();
   if (!db) return jsonError("Сховище облікових записів недоступне", 503);
 

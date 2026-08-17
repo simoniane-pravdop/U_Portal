@@ -146,6 +146,27 @@ const schemaStatements = [
     summary TEXT NOT NULL,
     created_at TEXT NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS portal_edit_locks (
+    entity_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    user_name TEXT NOT NULL,
+    acquired_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_portal_edit_locks_expires
+    ON portal_edit_locks(expires_at)`,
+  `CREATE TABLE IF NOT EXISTS portal_entity_versions (
+    id TEXT PRIMARY KEY,
+    entity_id TEXT NOT NULL,
+    revision INTEGER NOT NULL,
+    user_id TEXT NOT NULL,
+    user_name TEXT NOT NULL,
+    action TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_portal_entity_versions_entity_revision
+    ON portal_entity_versions(entity_id, revision)`,
 ];
 
 export async function database() {
@@ -197,6 +218,7 @@ export async function loadState(): Promise<{ state: PortalState; storage: "datab
     } else {
       state.revision = row.revision;
     }
+    state.discussions = Array.isArray(state.discussions) ? state.discussions : [];
     return { state, storage: "database" };
   }
   const state = seedState();
