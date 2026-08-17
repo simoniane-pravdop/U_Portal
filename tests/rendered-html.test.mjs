@@ -95,6 +95,7 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /Обрати картку/);
   assert.match(source, /work-advanced-filters/);
   assert.match(source, /Скинути фільтри/);
+  assert.match(source, /Редагувати картку/);
   assert.doesNotMatch(source, /Робочий контур/);
   assert.match(source, /Координація за циклами й підциклами/);
   assert.match(source, /Статус Завдання|parent\.health = state\.blockers/);
