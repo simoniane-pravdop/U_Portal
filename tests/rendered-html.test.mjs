@@ -85,6 +85,9 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /Asana автоматично додається до «Контрольного місця»/);
   assert.match(source, /Є ризик виконання/);
   assert.match(source, /completionBlockReason/);
+  assert.match(source, /window\.history\.pushState/);
+  assert.match(source, /popstate/);
+  assert.match(source, /Копіювати посилання/);
   assert.match(source, /Підключити Telegram/);
   assert.match(source, /recalculateHierarchy/);
   assert.match(source, /tree-row-menu/);

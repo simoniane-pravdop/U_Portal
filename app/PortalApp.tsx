@@ -344,6 +344,7 @@ export function PortalApp() {
   const savingRef = useRef(false);
   const draftNodeRef = useRef<WorkNode | null>(null);
   const restoredDraftRef = useRef(false);
+  const urlSyncReadyRef = useRef(false);
 
   const setNotice = useCallback<Notify>((value, tone = "success") => {
     setNoticeState(value);
@@ -380,9 +381,12 @@ export function PortalApp() {
     // Initial API hydration is the intended external synchronization for this client shell.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load()
-      .then(() => {
+      .then((data) => {
         const requestedView = new URLSearchParams(window.location.search).get("view") as View | null;
         if (requestedView && nav.some((item) => item.id === requestedView)) setView(requestedView);
+        const requestedNode = new URLSearchParams(window.location.search).get("node");
+        if (requestedNode && data.nodes.some((node) => node.id === requestedNode && !node.archived)) setSelectedId(requestedNode);
+        window.requestAnimationFrame(() => { urlSyncReadyRef.current = true; });
       })
       .catch((error) => setLoadError(error.message));
   }, [load]);
@@ -390,6 +394,28 @@ export function PortalApp() {
   useEffect(() => { payloadRef.current = payload; }, [payload]);
   useEffect(() => { savingRef.current = saving; }, [saving]);
   useEffect(() => { draftNodeRef.current = draftNode; }, [draftNode]);
+
+  useEffect(() => {
+    if (!payload || !urlSyncReadyRef.current) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("view", view);
+    if (selectedId && payload.nodes.some((node) => node.id === selectedId && !node.archived)) url.searchParams.set("node", selectedId);
+    else url.searchParams.delete("node");
+    if (`${url.pathname}${url.search}` !== `${window.location.pathname}${window.location.search}`) window.history.pushState({ view, node: selectedId }, "", `${url.pathname}${url.search}`);
+  }, [payload, selectedId, view]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      const requestedView = params.get("view") as View | null;
+      if (requestedView && nav.some((item) => item.id === requestedView)) setView(requestedView);
+      const requestedNode = params.get("node");
+      if (requestedNode && payloadRef.current?.nodes.some((node) => node.id === requestedNode && !node.archived)) setSelectedId(requestedNode);
+      else setSelectedId("");
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
 
   useEffect(() => {
     if (!payload?.currentUser.id || restoredDraftRef.current) return;
@@ -552,6 +578,17 @@ export function PortalApp() {
   const userById = (id: string) => payload.users.find((user) => user.id === id);
   const selected = payload.nodes.find((node) => node.id === selectedId && !node.archived) || payload.nodes.find((node) => !node.archived);
   const canManage = ["owner", "admin", "goal_owner", "cycle_owner", "coordinator"].includes(payload.currentUser.role);
+  const copyNodeLink = async (node: WorkNode, targetView: View) => {
+    const url = new URL(window.location.origin);
+    url.searchParams.set("view", targetView);
+    url.searchParams.set("node", node.id);
+    try {
+      await navigator.clipboard.writeText(url.toString());
+      setNotice(`Посилання на ${node.code} скопійовано`);
+    } catch {
+      setNotice("Не вдалося скопіювати посилання", "error");
+    }
+  };
   const clearNodeLocalDraft = () => {
     try { window.localStorage.removeItem(`portal:node-draft:${payload.currentUser.id}`); } catch { /* local draft is best-effort */ }
   };
@@ -755,10 +792,10 @@ export function PortalApp() {
               locks={locks}
               openCreateKind={openCreateKind} openEdit={openEdit}
               openWork={(node) => { setSelectedId(node.id); setView("my"); }}
-              mutate={mutate} completeNode={completeNode}
+              mutate={mutate} completeNode={completeNode} copyNodeLink={copyNodeLink}
             />
           )}
-          {view === "my" && <MyWork key={selected?.id || "empty"} payload={payload} selected={selected} selectedId={selectedId} setSelectedId={setSelectedId} userById={userById} canManage={canManage} saveWorkUpdate={saveWorkUpdate} submitAcceptance={submitAcceptance} resolveAcceptance={resolveAcceptance} completeNode={completeNode} openEdit={openEdit} setModal={setModal} asanaStatus={asanaStatus} mutate={mutate} setNotice={setNotice} openTree={(id) => { setSelectedId(id); setView("tree"); }} />}
+          {view === "my" && <MyWork key={selected?.id || "empty"} payload={payload} selected={selected} selectedId={selectedId} setSelectedId={setSelectedId} userById={userById} canManage={canManage} saveWorkUpdate={saveWorkUpdate} submitAcceptance={submitAcceptance} resolveAcceptance={resolveAcceptance} completeNode={completeNode} openEdit={openEdit} copyNodeLink={copyNodeLink} setModal={setModal} asanaStatus={asanaStatus} mutate={mutate} setNotice={setNotice} openTree={(id) => { setSelectedId(id); setView("tree"); }} />}
           {view === "coordination" && <CoordinationView payload={payload} userById={userById} select={(id) => { setSelectedId(id); setView("tree"); }} open={(node) => { setSelectedId(node.id); setModal("coordination"); }} />}
           {view === "settings" && <SettingsView payload={payload} selected={selected} setSelectedId={setSelectedId} asanaStatus={asanaStatus} telegramStatus={telegramStatus} setTelegramStatus={setTelegramStatus} mutate={mutate} setNotice={setNotice} reload={load} />}
         </div>
@@ -834,9 +871,9 @@ function DashboardView({ data, payload, userById, healthFilter, setHealthFilter,
 function TreeView(props: {
   payload: PortalPayload; selected?: WorkNode; selectedId: string; setSelectedId: (id: string) => void; search: string; setSearch: (value: string) => void;
   userById: (id: string) => PortalUser | undefined; canManage: boolean; locks: EditingLock[]; openCreateKind: (kind: NodeKind, context?: WorkNode) => void; openEdit: (node: WorkNode) => Promise<void>;
-  openWork: (node: WorkNode) => void; mutate: (action: string, entityId: string, recipe: (state: PortalState) => void) => Promise<boolean>; completeNode: (node: WorkNode) => Promise<boolean>;
+  openWork: (node: WorkNode) => void; mutate: (action: string, entityId: string, recipe: (state: PortalState) => void) => Promise<boolean>; completeNode: (node: WorkNode) => Promise<boolean>; copyNodeLink: (node: WorkNode, targetView: View) => Promise<void>;
 }) {
-  const { payload, selected, selectedId, setSelectedId, search, setSearch, userById, canManage, locks, openCreateKind, openEdit, openWork, mutate, completeNode } = props;
+  const { payload, selected, selectedId, setSelectedId, search, setSearch, userById, canManage, locks, openCreateKind, openEdit, openWork, mutate, completeNode, copyNodeLink } = props;
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(payload.nodes.filter((node) => node.kind !== "task").map((node) => node.id)));
   const [detailTab, setDetailTab] = useState<"passport" | "structure" | "history">("passport");
   const [treeCompact, setTreeCompact] = useState(false);
@@ -902,7 +939,7 @@ function TreeView(props: {
       {selected ? <section className="node-detail">
         <header className="node-detail-head">
           <div><span>{kindLabels[selected.kind]} · {selected.code}</span><h2>{selected.title}</h2><p>{selected.result}</p></div>
-          <div className="node-head-actions"><ProgressRing value={selected.progress} />{canEditSelected && <button className="secondary" onClick={() => void openEdit(selected)}>Редагувати паспорт</button>}{canEditSelected && selected.lifecycle !== "completed" && <button className="positive" disabled={Boolean(completionReason)} title={completionReason || "Позначити завершеним"} onClick={() => void completeNode(selected)}>Завершити</button>}<button className="primary work-link" onClick={() => openWork(selected)}>Відкрити робочу картку →</button></div>
+          <div className="node-head-actions"><ProgressRing value={selected.progress} />{canEditSelected && <button className="secondary" onClick={() => void openEdit(selected)}>Редагувати паспорт</button>}<button className="secondary" onClick={() => void copyNodeLink(selected, "tree")}>Копіювати посилання</button>{canEditSelected && selected.lifecycle !== "completed" && <button className="positive" disabled={Boolean(completionReason)} title={completionReason || "Позначити завершеним"} onClick={() => void completeNode(selected)}>Завершити</button>}<button className="primary work-link" onClick={() => openWork(selected)}>Відкрити робочу картку →</button></div>
         </header>
         <div className="status-line"><StatusBadge node={selected} />{selected.decisionRequired && <span className="decision-badge">Потрібне рішення</span>}<span>{lifecycleLabels[selected.lifecycle]}</span><span>Оновлено {new Date(selected.updatedAt).toLocaleString("uk-UA")}</span></div>
         <div className="detail-tabs" role="tablist">{(["passport", "structure", "history"] as const).map((tab) => <button key={tab} role="tab" aria-selected={detailTab === tab} className={`${detailTab === tab ? "active" : ""} ${tab === "history" ? "history-tab" : ""}`} onClick={() => setDetailTab(tab)}>{tab === "passport" ? "Паспорт" : tab === "structure" ? "Структура і зв’язки" : `Історія · ${payload.audit.filter((entry) => entry.entityId === selected.id).length + (selected.updates || []).length}`}</button>)}</div>
@@ -914,7 +951,7 @@ function TreeView(props: {
   </>;
 }
 
-function MyWork({ payload, selected, selectedId, setSelectedId, userById, canManage, saveWorkUpdate, submitAcceptance, resolveAcceptance, completeNode, openEdit, setModal, asanaStatus, mutate, setNotice, openTree }: { payload: PortalPayload; selected?: WorkNode; selectedId: string; setSelectedId: (id: string) => void; userById: (id: string) => PortalUser | undefined; canManage: boolean; saveWorkUpdate: (node: WorkNode, update: Omit<WorkUpdate, "id" | "createdAt" | "createdBy" | "source">) => Promise<boolean>; submitAcceptance: (node: WorkNode) => Promise<boolean>; resolveAcceptance: (acceptance: Acceptance, accepted: boolean) => Promise<boolean>; completeNode: (node: WorkNode) => Promise<boolean>; openEdit: (node: WorkNode) => Promise<void>; setModal: (modal: Modal) => void; asanaStatus: { configured: boolean; connected: boolean; connection?: Record<string, string> } | null; mutate: (action: string, entityId: string, recipe: (state: PortalState) => void) => Promise<boolean>; setNotice: Notify; openTree: (id: string) => void }) {
+function MyWork({ payload, selected, selectedId, setSelectedId, userById, canManage, saveWorkUpdate, submitAcceptance, resolveAcceptance, completeNode, openEdit, copyNodeLink, setModal, asanaStatus, mutate, setNotice, openTree }: { payload: PortalPayload; selected?: WorkNode; selectedId: string; setSelectedId: (id: string) => void; userById: (id: string) => PortalUser | undefined; canManage: boolean; saveWorkUpdate: (node: WorkNode, update: Omit<WorkUpdate, "id" | "createdAt" | "createdBy" | "source">) => Promise<boolean>; submitAcceptance: (node: WorkNode) => Promise<boolean>; resolveAcceptance: (acceptance: Acceptance, accepted: boolean) => Promise<boolean>; completeNode: (node: WorkNode) => Promise<boolean>; openEdit: (node: WorkNode) => Promise<void>; copyNodeLink: (node: WorkNode, targetView: View) => Promise<void>; setModal: (modal: Modal) => void; asanaStatus: { configured: boolean; connected: boolean; connection?: Record<string, string> } | null; mutate: (action: string, entityId: string, recipe: (state: PortalState) => void) => Promise<boolean>; setNotice: Notify; openTree: (id: string) => void }) {
   const [filter, setFilter] = useState<"action" | "manage" | "acceptance" | "all">("action");
   const [listQuery, setListQuery] = useState("");
   const [sort, setSort] = useState<"deadline" | "priority" | "updated" | "progress">("deadline");
@@ -945,7 +982,7 @@ function MyWork({ payload, selected, selectedId, setSelectedId, userById, canMan
     {pendingApprovals.length > 0 && <section className="approval-queue panel"><div className="panel-head"><div><span>Погодження</span><h2>Очікують вашого рішення</h2></div><b className="count amber">{pendingApprovals.length}</b></div><div>{pendingApprovals.map((acceptance) => { const node = payload.nodes.find((item) => item.id === acceptance.nodeId); return node ? <button key={acceptance.id} onClick={() => { setSelectedId(node.id); setFilter("acceptance"); }}><span>{node.code}</span><strong>{node.title}</strong><small>Передано {new Date(acceptance.submittedAt).toLocaleString("uk-UA")}</small></button> : null; })}</div></section>}
     <div className="my-workbench">
       <aside className="work-inbox"><label className="work-object-picker compact"><span>Обрати картку</span><select value={current?.id || ""} onChange={(event) => setSelectedId(event.target.value)}><option value="">Ціль, цикл або завдання…</option>{mine.map((node) => <option key={node.id} value={node.id}>{node.code} · {node.title}</option>)}</select></label><div className="work-filter">{(["action", "manage", "acceptance", "all"] as const).map((item) => <button key={item} className={filter === item ? "active" : ""} onClick={() => setFilter(item)}>{item === "action" ? "Мої дії" : item === "manage" ? "Координую" : item === "acceptance" ? "Приймаю" : "Усі"}</button>)}</div><div className="work-list-controls"><input value={listQuery} onChange={(event) => setListQuery(event.target.value)} placeholder="Пошук…" /><select value={sort} onChange={(event) => setSort(event.target.value as typeof sort)}><option value="deadline">За строком</option><option value="priority">За пріоритетом</option><option value="updated">За оновленням</option><option value="progress">За прогресом</option></select></div><details className="work-advanced-filters"><summary><span>Фільтри</span>{activeFilterCount > 0 && <b>{activeFilterCount}</b>}<i>⌄</i></summary><div><label><span>Рівень</span><select value={levelFilter} onChange={(event) => setLevelFilter(event.target.value as typeof levelFilter)}><option value="all">Усі рівні</option><option value="goal">Цілі</option><option value="cycle">Цикли</option><option value="subcycle">Підцикли</option><option value="task">Завдання</option></select></label><label><span>Статус</span><select value={lifecycleFilter} onChange={(event) => setLifecycleFilter(event.target.value as typeof lifecycleFilter)}><option value="all">Усі статуси</option>{Object.entries(lifecycleLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label><span>Стан</span><select value={workHealthFilter} onChange={(event) => setWorkHealthFilter(event.target.value as typeof workHealthFilter)}><option value="all">Будь-який стан</option><option value="normal">Нормально</option><option value="risk">Є ризик</option><option value="blocked">Заблоковано</option></select></label><label><span>Пріоритет</span><select value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value as typeof priorityFilter)}><option value="all">Усі пріоритети</option><option value="critical">Критичний</option><option value="high">Високий</option><option value="normal">Нормальний</option><option value="low">Низький</option></select></label><button type="button" disabled={!activeFilterCount} onClick={resetListFilters}>Скинути фільтри</button></div></details><div className="work-inbox-list">{filtered.map((node) => <button className={`work-list-row ${node.id === current?.id ? "selected" : ""}`} key={node.id} onClick={() => setSelectedId(node.id)}><div><span>{kindLabels[node.kind]} · {node.code}</span><strong>{node.title}</strong></div><StatusBadge node={node} /><footer><small>{node.progress}%</small><time>{dateLabel(node.plannedEnd)}</time></footer></button>)}{!filtered.length && <p className="empty-state padded">За вибраними фільтрами карток немає.</p>}</div></aside>
-      {current ? <section className="work-desk"><header className="work-desk-head"><div><span>{kindLabels[current.kind]} · {current.code}</span><h2>{current.title}</h2><p>{current.result}</p></div><div><ProgressRing value={current.progress} />{mayEditCard && <button className="secondary" onClick={() => void openEdit(current)}>Редагувати картку</button>}{current.kind === "task" && <button className="secondary" onClick={() => document.getElementById(`asana-link-${current.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}>Asana</button>}{current.lifecycle !== "completed" && mayWork && <button className="positive" disabled={Boolean(completionReason)} title={completionReason || "Позначити завершеним"} onClick={() => void completeNode(current)}>Завершити</button>}<button className="secondary" onClick={() => openTree(current.id)}>Паспорт у дереві</button></div></header><div className="status-line"><StatusBadge node={current} />{current.decisionRequired && <span className="decision-badge">Потрібне рішення</span>}<span>Строк {dateLabel(current.plannedEnd)}</span><span>Прогноз {dateLabel(current.forecastEnd)}</span>{completionReason && <span className="completion-hint">{completionReason}</span>}</div>
+      {current ? <section className="work-desk"><header className="work-desk-head"><div><span>{kindLabels[current.kind]} · {current.code}</span><h2>{current.title}</h2><p>{current.result}</p></div><div><ProgressRing value={current.progress} />{mayEditCard && <button className="secondary" onClick={() => void openEdit(current)}>Редагувати картку</button>}<button className="secondary" onClick={() => void copyNodeLink(current, "my")}>Посилання</button>{current.kind === "task" && <button className="secondary" onClick={() => document.getElementById(`asana-link-${current.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}>Asana</button>}{current.lifecycle !== "completed" && mayWork && <button className="positive" disabled={Boolean(completionReason)} title={completionReason || "Позначити завершеним"} onClick={() => void completeNode(current)}>Завершити</button>}<button className="secondary" onClick={() => openTree(current.id)}>Паспорт у дереві</button></div></header><div className="status-line"><StatusBadge node={current} />{current.decisionRequired && <span className="decision-badge">Потрібне рішення</span>}<span>Строк {dateLabel(current.plannedEnd)}</span><span>Прогноз {dateLabel(current.forecastEnd)}</span>{completionReason && <span className="completion-hint">{completionReason}</span>}</div>
         <div className="work-summary-grid"><article><span>Власник результату</span><div className="person-line"><UserAvatar user={userById(current.ownerId)} compact /><strong>{userById(current.ownerId)?.name}</strong></div></article><article><span>Виконавець</span><div className="person-line"><UserAvatar user={userById(current.assigneeId)} compact /><strong>{userById(current.assigneeId)?.name}</strong></div></article><article><span>Приймає результат</span><div className="person-line"><UserAvatar user={userById(current.acceptorId)} compact /><strong>{userById(current.acceptorId)?.name}</strong></div></article></div>
         {current.kind === "task" ? <div className="execution-grid"><div><WorkStatusForm key={current.id} node={current} disabled={!mayWork} notify={setNotice} save={(update) => saveWorkUpdate(current, update)} /><section className="work-section"><div className="work-section-head"><div><span>Результат</span><h3>Докази та передання</h3></div><button onClick={() => setModal("evidence")}>+ Додати доказ</button></div><p>{current.acceptanceCriteria}</p><div className="evidence-stack">{current.evidence.map((item) => <a key={item.id} href={item.kind === "note" ? undefined : item.value} target="_blank" rel="noreferrer"><b>{item.label}</b><span>{item.kind === "file" ? "Файл" : item.kind === "link" ? "Посилання" : item.value}</span></a>)}{!current.evidence.length && <span className="empty-state">Доказів ще немає.</span>}</div><div className="work-action-row"><button onClick={() => setModal("blocker")}>Додати блокер</button><button onClick={() => setModal("decision")}>Запитати рішення</button><button onClick={() => setModal("dependency")}>Додати залежність</button>{!["acceptance", "completed"].includes(current.lifecycle) && <button className="primary" onClick={() => void submitAcceptance(current)}>Передати на приймання</button>}</div>{latestAcceptance && (payload.currentUser.id === latestAcceptance.acceptorId || canManage) && <div className="acceptance-box"><strong>Результат очікує приймання</strong><div><button className="negative" onClick={() => void resolveAcceptance(latestAcceptance, false)}>Повернути</button><button className="positive" onClick={() => void resolveAcceptance(latestAcceptance, true)}>Прийняти</button></div></div>}</section></div><aside><AsanaSyncPanel key={`${current.id}-${current.asana.taskGid}`} payload={payload} selected={current} asanaStatus={asanaStatus} mutate={mutate} setNotice={setNotice} compact /><WorkUpdateHistory node={current} userById={userById} /></aside></div> : <div className="aggregate-work"><section className="work-section aggregate-note"><span>Агрегований рівень</span><h3>Стан цього рівня формується з нижчих рівнів</h3><p>Прогрес, ризик і статус перераховуються після кожного звіту по завданню. Для підциклу додатково зберігається координаційний знімок.</p>{["cycle", "subcycle"].includes(current.kind) && <button className="primary" onClick={() => setModal("coordination")}>Зафіксувати координацію</button>}</section><section className="work-section"><div className="work-section-head"><div><span>Нижчі рівні</span><h3>Джерела стану</h3></div><b>{children.length}</b></div><div className="aggregate-children">{children.map((node) => <button key={node.id} onClick={() => setSelectedId(node.id)}><span>{node.code}</span><strong>{node.title}</strong><em>{node.progress}%</em><StatusBadge node={node} /></button>)}</div></section></div>}
         <DiscussionPanel node={current} payload={payload} mutate={mutate} notify={setNotice} userById={userById} />
