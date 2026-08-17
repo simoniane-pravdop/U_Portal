@@ -28,7 +28,7 @@ export async function POST(request: Request) {
       if (!body.taskGid) return jsonError("Не вказано GID задачі Asana", 400);
       result = await asanaRequest(
         user.id,
-        `/tasks/${encodeURIComponent(body.taskGid)}?opt_fields=name,completed,due_on,start_on,assignee.name,assignee.email,permalink_url,modified_at,notes`,
+        `/tasks/${encodeURIComponent(body.taskGid)}?opt_fields=name,completed,due_on,start_on,assignee.name,assignee.email,permalink_url,modified_at,notes,projects.gid,projects.name,workspace.gid,workspace.name`,
       );
     } else if (body.action === "create") {
       if (!body.projectGid && !body.workspaceGid) return jsonError("Не вказано робочий простір Asana", 400);

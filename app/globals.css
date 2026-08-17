@@ -517,11 +517,23 @@ tbody tr:hover { background: #f8fafc; }
 .asana-mode-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin: 12px 14px 8px; padding: 4px; border-radius: 8px; background: #e9eef3; }
 .asana-mode-switch button { padding: 8px; border: 0; border-radius: 6px; color: var(--muted); background: transparent; font-size: 9px; font-weight: 850; }
 .asana-mode-switch button.active { color: #fff; background: var(--navy-800); }
-.asana-link-form, .asana-create-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; padding: 4px 14px 8px; }
-.asana-link-form label, .asana-create-form label { display: grid; gap: 5px; }
-.asana-link-form label span, .asana-create-form label span, .asana-create-form > div > span, .asana-linked-card span { color: var(--muted); font-size: 8px; font-weight: 800; text-transform: uppercase; }
-.asana-link-form input, .asana-create-form input, .asana-create-form select { width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid #cbd5df; border-radius: 7px; background: #fff; font-size: 10px; }
+.asana-link-stack { display: grid; gap: 8px; padding: 4px 14px 8px; }
+.asana-link-form, .asana-create-form, .asana-search-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; }
+.asana-create-form { padding: 4px 14px 8px; }
+.asana-link-form label, .asana-create-form label, .asana-search-form label { display: grid; gap: 5px; }
+.asana-link-form label span, .asana-create-form label span, .asana-search-form label span, .asana-create-form > div > span, .asana-linked-card span { color: var(--muted); font-size: 8px; font-weight: 800; text-transform: uppercase; }
+.asana-link-form input, .asana-create-form input, .asana-create-form select, .asana-search-form input { width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid #cbd5df; border-radius: 7px; background: #fff; font-size: 10px; }
 .asana-link-form > button, .asana-create-form > button { min-height: 35px; padding: 8px 10px; border-radius: 7px; font-size: 9px; font-weight: 850; }
+.asana-search-form > button { min-height: 35px; padding: 8px 14px; border-radius: 7px; font-size: 9px; font-weight: 850; }
+.asana-search-message { margin: 0; color: var(--muted); font-size: 8px; }
+.asana-search-results { display: grid; gap: 5px; max-height: 255px; overflow: auto; }
+.asana-search-results article { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 9px; border: 1px solid var(--line-soft); border-radius: 7px; background: #fff; }
+.asana-search-results article > div { min-width: 0; display: grid; gap: 3px; }
+.asana-search-results strong { overflow: hidden; color: var(--navy-900); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.asana-search-results span, .asana-search-results small { overflow: hidden; color: var(--muted); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.asana-search-results button { padding: 7px 9px; border-radius: 6px; color: #fff; background: var(--navy-800); font-size: 8px; font-weight: 850; }
+.asana-manual-divider { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 8px; }
+.asana-manual-divider::before, .asana-manual-divider::after { height: 1px; flex: 1; background: var(--line-soft); content: ""; }
 .asana-create-form > div { display: grid; gap: 3px; padding: 6px 8px; border-left: 2px solid var(--gold); }
 .asana-create-form > div strong { font-size: 9px; }
 .asana-create-form > div small { color: var(--muted); font-size: 8px; }
@@ -906,7 +918,7 @@ tbody tr:hover { background: #f8fafc; }
   .coordination-questions button small { grid-column: 2; }
   .coordination-task-list button { grid-template-columns: 48px minmax(0, 1fr) 30px; }
   .coordination-task-list .health-badge { grid-column: 2 / -1; }
-  .asana-link-form, .asana-create-form { grid-template-columns: 1fr; }
+  .asana-link-form, .asana-create-form, .asana-search-form { grid-template-columns: 1fr; }
   .asana-linked-card { align-items: stretch; flex-direction: column; }
   .asana-linked-card > div:last-child { justify-content: flex-start; }
 }

@@ -1127,6 +1127,10 @@ function AsanaSyncPanel({ payload, selected, asanaStatus, mutate, setNotice, com
   const { taskGid, projectGid, workspaceGid, mode } = draft;
   const [asanaProjects, setAsanaProjects] = useState<Array<{ gid: string; name: string; workspace: string; workspaceGid: string }>>([]);
   const [asanaWorkspaces, setAsanaWorkspaces] = useState<Array<{ gid: string; name: string }>>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<Array<{ gid: string; name: string; completed?: boolean; due_on?: string | null; permalink_url?: string; assignee?: { name: string } | null; projects?: Array<{ gid: string; name: string }>; workspace?: { name: string } }>>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchMessage, setSearchMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const linked = Boolean(selected.asana.taskGid);
   useEffect(() => {
@@ -1137,14 +1141,14 @@ function AsanaSyncPanel({ payload, selected, asanaStatus, mutate, setNotice, com
       .catch(() => { setAsanaWorkspaces([]); setAsanaProjects([]); });
   }, [asanaStatus?.connected]);
   const normalizeTaskGid = (value: string) => value.match(/\d{8,}/g)?.at(-1) || value.trim();
-  const sync = async (action: "read" | "create" | "update") => {
+  const sync = async (action: "read" | "create" | "update", taskOverride = "") => {
     setBusy(true); setNotice("");
     try {
-      const normalizedTaskGid = normalizeTaskGid(taskGid || selected.asana.taskGid);
-      const resolvedProjectGid = projectGid || selected.asana.projectGid;
+      const normalizedTaskGid = normalizeTaskGid(taskOverride || taskGid || selected.asana.taskGid);
+      const resolvedProjectGid = action === "read" ? "" : projectGid || selected.asana.projectGid;
       const resolvedWorkspaceGid = workspaceGid || (!resolvedProjectGid && asanaWorkspaces.length === 1 ? asanaWorkspaces[0].gid : "");
       const response = await fetch("/api/asana/sync", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, nodeId: selected.id, taskGid: normalizedTaskGid, projectGid: resolvedProjectGid, workspaceGid: resolvedWorkspaceGid, title: selected.title, description: `${selected.code}\n\n${selected.result}\n\nКритерій приймання: ${selected.acceptanceCriteria}`, dueOn: selected.plannedEnd, completed: selected.lifecycle === "completed" }) });
-      const result = (await response.json()) as { error?: string; data?: { gid?: string; name?: string; notes?: string; due_on?: string | null; completed?: boolean; permalink_url?: string; modified_at?: string; assignee?: { email?: string } } };
+      const result = (await response.json()) as { error?: string; data?: { gid?: string; name?: string; notes?: string; due_on?: string | null; completed?: boolean; permalink_url?: string; modified_at?: string; assignee?: { email?: string }; projects?: Array<{ gid: string; name: string }> } };
       if (!response.ok) throw new Error(result.error || "Помилка Asana");
       const task = result.data || {};
       await mutate(`Синхронізовано ${selected.code} з Asana`, selected.id, (state) => {
@@ -1165,7 +1169,7 @@ function AsanaSyncPanel({ payload, selected, asanaStatus, mutate, setNotice, com
         const resolvedUrl = task?.permalink_url || node.asana.taskUrl || (resolvedGid ? `https://app.asana.com/0/0/${resolvedGid}/f` : "");
         node.asana.taskGid = resolvedGid;
         node.asana.taskUrl = resolvedUrl;
-        node.asana.projectGid = resolvedProjectGid;
+        node.asana.projectGid = action === "read" ? task.projects?.[0]?.gid || "" : resolvedProjectGid;
         node.asana.lastSyncedAt = isoNow();
         node.asana.syncState = "linked";
         const otherPlaces = node.controlPlace.split("\n").filter((item) => item.trim() && !item.trim().startsWith("Asana ·"));
@@ -1189,9 +1193,24 @@ function AsanaSyncPanel({ payload, selected, asanaStatus, mutate, setNotice, com
   const effectiveWorkspaceGid = workspaceGid || (!projectGid && asanaWorkspaces.length === 1 ? asanaWorkspaces[0].gid : "");
   const destinationValue = projectGid ? `project:${projectGid}` : effectiveWorkspaceGid ? `workspace:${effectiveWorkspaceGid}` : "";
   const destinationField = asanaWorkspaces.length ? <select value={destinationValue} onChange={(event) => { const [kind, gid] = event.target.value.split(":"); const project = asanaProjects.find((item) => item.gid === gid); setDraft({ ...draft, projectGid: kind === "project" ? gid : "", workspaceGid: kind === "workspace" ? gid : project?.workspaceGid || "" }); }}><option value="">Оберіть місце створення</option>{asanaWorkspaces.map((workspace) => <option key={`workspace:${workspace.gid}`} value={`workspace:${workspace.gid}`}>Мої завдання · {workspace.name} (без проєкту)</option>)}{asanaProjects.map((project) => <option key={`project:${project.gid}`} value={`project:${project.gid}`}>{project.name} · {project.workspace}</option>)}</select> : <input value={workspaceGid} onChange={(event) => setDraft({ ...draft, projectGid: "", workspaceGid: event.target.value.trim() })} placeholder="GID робочого простору Asana" />;
+  const searchTasks = async () => {
+    if (searchQuery.trim().length < 2) return;
+    setSearching(true); setSearchMessage(""); setNotice("");
+    try {
+      const response = await fetch(`/api/asana/tasks/search?q=${encodeURIComponent(searchQuery.trim())}`, { cache: "no-store" });
+      const result = (await response.json()) as { error?: string; limitedSearch?: boolean; tasks?: typeof searchResults };
+      if (!response.ok) throw new Error(result.error || "Не вдалося виконати пошук в Asana");
+      const tasks = result.tasks || [];
+      setSearchResults(tasks);
+      setSearchMessage(tasks.length ? `${tasks.length} збігів${result.limitedSearch ? " · безкоштовний пошук лише серед ваших активних завдань" : ""}` : "За цією назвою активних завдань не знайдено");
+    } catch (error) {
+      setSearchResults([]);
+      setSearchMessage(error instanceof Error ? error.message : "Не вдалося виконати пошук в Asana");
+    } finally { setSearching(false); }
+  };
   const syncPanel = <section id={`asana-link-${selected.id}`} className={compact ? "work-section asana-work" : "panel sync-workbench"}>
     <div className="panel-head"><div><span>Контрольне місце · Asana</span><h2>{linked ? "Задачу прив’язано" : "Прив’язати або створити задачу"}</h2></div><span className={`connection-state ${asanaStatus?.connected ? "connected" : ""}`}>{asanaStatus?.connected ? "Акаунт підключено" : "Акаунт не підключено"}</span></div>
-    {!asanaStatus?.connected ? <div className="asana-empty"><p>Спочатку підключіть особистий Asana-акаунт у налаштуваннях порталу.</p></div> : linked ? <div className="asana-linked-card"><div><span>Пов’язана задача</span><strong>{selected.asana.taskGid}</strong><small>{selected.asana.lastSyncedAt ? `Оновлено ${new Date(selected.asana.lastSyncedAt).toLocaleString("uk-UA")}` : "Ще не синхронізовано"}</small></div><div>{selected.asana.taskUrl && <a href={selected.asana.taskUrl} target="_blank" rel="noreferrer">Відкрити в Asana ↗</a>}<button disabled={busy} onClick={() => void sync("read")}>Оновити з Asana</button><button disabled={busy} onClick={() => void sync("update")}>Передати зміни</button><button className="danger" disabled={busy} onClick={() => void unlink()}>Відв’язати</button></div></div> : <><div className="asana-mode-switch"><button className={mode === "link" ? "active" : ""} onClick={() => setDraft({ ...draft, mode: "link" })}>Прив’язати наявну</button><button className={mode === "create" ? "active" : ""} onClick={() => setDraft({ ...draft, mode: "create" })}>Створити нову</button></div>{mode === "link" ? <div className="asana-link-form"><label><span>Посилання або GID задачі Asana</span><input value={taskGid} onChange={(event) => setDraft({ ...draft, taskGid: event.target.value })} placeholder="https://app.asana.com/… або GID" /></label><button className="primary" disabled={busy || !taskGid.trim()} onClick={() => void sync("read")}>Перевірити й прив’язати</button></div> : <div className="asana-create-form"><label><span>Місце створення в Asana</span>{destinationField}</label><div><span>Буде створено</span><strong>{selected.title}</strong><small>Без проєкту задача з’явиться у «Моїх завданнях» поточного Asana-користувача · строк: {dateLabel(selected.plannedEnd)}</small></div><button className="primary" disabled={busy || (!projectGid && !effectiveWorkspaceGid)} onClick={() => void sync("create")}>Створити в Asana й прив’язати</button></div>}</>}
+    {!asanaStatus?.connected ? <div className="asana-empty"><p>Спочатку підключіть особистий Asana-акаунт у налаштуваннях порталу.</p></div> : linked ? <div className="asana-linked-card"><div><span>Пов’язана задача</span><strong>{selected.asana.taskGid}</strong><small>{selected.asana.lastSyncedAt ? `Оновлено ${new Date(selected.asana.lastSyncedAt).toLocaleString("uk-UA")}` : "Ще не синхронізовано"}</small></div><div>{selected.asana.taskUrl && <a href={selected.asana.taskUrl} target="_blank" rel="noreferrer">Відкрити в Asana ↗</a>}<button disabled={busy} onClick={() => void sync("read")}>Оновити з Asana</button><button disabled={busy} onClick={() => void sync("update")}>Передати зміни</button><button className="danger" disabled={busy} onClick={() => void unlink()}>Відв’язати</button></div></div> : <><div className="asana-mode-switch"><button className={mode === "link" ? "active" : ""} onClick={() => setDraft({ ...draft, mode: "link" })}>Прив’язати наявну</button><button className={mode === "create" ? "active" : ""} onClick={() => setDraft({ ...draft, mode: "create" })}>Створити нову</button></div>{mode === "link" ? <div className="asana-link-stack"><div className="asana-search-form"><label><span>Знайти завдання за назвою</span><input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void searchTasks(); } }} placeholder="Введіть частину назви…" /></label><button className="primary" disabled={searching || searchQuery.trim().length < 2} onClick={() => void searchTasks()}>{searching ? "Шукаю…" : "Знайти"}</button></div>{searchMessage && <p className="asana-search-message">{searchMessage}</p>}{searchResults.length > 0 && <div className="asana-search-results">{searchResults.map((task) => <article key={task.gid}><div><strong>{task.name}</strong><span>{task.projects?.map((project) => project.name).join(", ") || task.workspace?.name || "Без проєкту"}</span><small>{task.assignee?.name || "Без виконавця"} · {task.completed ? "Завершено" : "Активне"} · {task.due_on ? `до ${dateLabel(task.due_on)}` : "без строку"}</small></div><button disabled={busy} onClick={() => void sync("read", task.gid)}>Прив’язати</button></article>)}</div>}<div className="asana-manual-divider"><span>або вставте посилання</span></div><div className="asana-link-form"><label><span>Посилання або GID задачі Asana</span><input value={taskGid} onChange={(event) => setDraft({ ...draft, taskGid: event.target.value })} placeholder="https://app.asana.com/… або GID" /></label><button className="primary" disabled={busy || !taskGid.trim()} onClick={() => void sync("read")}>Перевірити й прив’язати</button></div></div> : <div className="asana-create-form"><label><span>Місце створення в Asana</span>{destinationField}</label><div><span>Буде створено</span><strong>{selected.title}</strong><small>Без проєкту задача з’явиться у «Моїх завданнях» поточного Asana-користувача · строк: {dateLabel(selected.plannedEnd)}</small></div><button className="primary" disabled={busy || (!projectGid && !effectiveWorkspaceGid)} onClick={() => void sync("create")}>Створити в Asana й прив’язати</button></div>}</>}
     {!compact && <div className="mapping-table"><div className="mapping-head"><span>Поле</span><span>Контрольне джерело</span></div>{Object.entries(selected.asana.rules).map(([field, rule]) => <div key={field}><span>{field === "title" ? "Назва" : field === "assignee" ? "Виконавець" : field === "dates" ? "Дати" : field === "status" ? "Стан" : "Опис"}</span><select value={rule} onChange={(event) => mutate(`Змінено правило синхронізації ${field}`, selected.id, (state) => { const node = state.nodes.find((item) => item.id === selected.id)!; node.asana.rules[field as keyof typeof node.asana.rules] = event.target.value as "portal" | "asana" | "manual"; })}><option value="portal">Портал</option><option value="asana">Asana</option><option value="manual">Ручне узгодження</option></select></div>)}</div>}
     <p className="sync-note">Після прив’язування Asana автоматично додається до «Контрольного місця». Портал зберігає управлінський результат, а Asana — фактичне виконання.</p>
   </section>;
