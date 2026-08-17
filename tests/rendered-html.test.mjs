@@ -104,7 +104,12 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /portal:node-draft/);
   assert.match(source, /Дані автоматично оновлено/);
   assert.match(source, /Питання, погодження та коментарі/);
-  assert.match(source, /Обрати картку/);
+  assert.match(source, /Рівень управління/);
+  assert.match(source, /Усі цілі/);
+  assert.match(source, /Усі цикли/);
+  assert.match(source, /Усі підцикли/);
+  assert.match(source, /Усі завдання/);
+  assert.doesNotMatch(source, /Обрати картку/);
   assert.match(source, /work-advanced-filters/);
   assert.match(source, /Скинути фільтри/);
   assert.match(source, /Редагувати картку/);
