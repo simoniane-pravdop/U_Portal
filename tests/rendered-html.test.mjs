@@ -80,7 +80,11 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /Новий пароль/);
   assert.match(source, /api\/auth\/password/);
   assert.match(source, /api\/admin\/users/);
-  assert.match(source, /Створити задачу в Asana/);
+  assert.match(source, /Створити в Asana й прив’язати/);
+  assert.match(source, /Перевірити й прив’язати/);
+  assert.match(source, /Asana автоматично додається до «Контрольного місця»/);
+  assert.match(source, /Є ризик виконання/);
+  assert.match(source, /completionBlockReason/);
   assert.match(source, /Підключити Telegram/);
   assert.match(source, /recalculateHierarchy/);
   assert.match(source, /tree-row-menu/);
@@ -122,10 +126,11 @@ test("password authentication uses slow hashing, rate limiting, and no committed
 
 test("compact laptop and mobile layouts are declared", async () => {
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
-  assert.match(css, /@media \(max-width: 1250px\)/);
+  assert.match(css, /@media \(max-width: 1366px\)/);
   assert.match(css, /@media \(max-width: 760px\)/);
   assert.match(css, /@media \(max-width: 520px\)/);
   assert.match(css, /\.tree-workbench\.compact-tree/);
   assert.match(css, /\.tree-workbench\.mobile-pane-tree \.node-detail/);
   assert.match(css, /position: fixed; z-index: 90; top: auto; right: 0; bottom: 0/);
+  assert.match(css, /\.coordination-card footer button\.primary/);
 });
