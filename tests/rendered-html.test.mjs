@@ -22,6 +22,8 @@ test("server-renders the management portal shell", async () => {
   assert.match(html, /Управлінський портал/i);
   assert.match(html, /Правова Допомога/i);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
+  const logo = await readFile(new URL("../public/pravdop-logo.png", import.meta.url));
+  assert.ok(logo.length > 100);
 });
 
 test("initial state has the two authorized administrators and no test management data", async () => {
@@ -88,6 +90,9 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /window\.history\.pushState/);
   assert.match(source, /popstate/);
   assert.match(source, /Копіювати посилання/);
+  assert.match(source, /pravdop-logo\.png/);
+  assert.match(source, /sidebarCollapsed/);
+  assert.match(source, /Розгорнути бічне меню/);
   assert.match(source, /Підключити Telegram/);
   assert.match(source, /recalculateHierarchy/);
   assert.match(source, /tree-row-menu/);

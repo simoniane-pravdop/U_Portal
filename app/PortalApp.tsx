@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @next/next/no-img-element -- the bundled 145×48 brand asset is already optimized and vinext-compatible */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
@@ -62,12 +63,12 @@ const roleLabels: Record<string, string> = {
   executor: "Виконавець",
   viewer: "Спостерігач",
 };
-const nav: Array<{ id: View; label: string; hint: string; mark: string }> = [
-  { id: "dashboard", label: "Дашборд", hint: "Результати й відхилення", mark: "01" },
-  { id: "tree", label: "Дерево цілей", hint: "Цикли та завдання", mark: "02" },
-  { id: "my", label: "Моя робота", hint: "Виконання й звіти", mark: "03" },
-  { id: "coordination", label: "Координація", hint: "Управління підциклами", mark: "04" },
-  { id: "settings", label: "Налаштування", hint: "Бібліотеки й інтеграції", mark: "05" },
+const nav: Array<{ id: View; label: string; hint: string; icon: string }> = [
+  { id: "dashboard", label: "Дашборд", hint: "Результати й відхилення", icon: "▦" },
+  { id: "tree", label: "Дерево цілей", hint: "Цикли та завдання", icon: "⌘" },
+  { id: "my", label: "Моя робота", hint: "Виконання й звіти", icon: "☑" },
+  { id: "coordination", label: "Координація", hint: "Управління підциклами", icon: "↔" },
+  { id: "settings", label: "Налаштування", hint: "Бібліотеки й інтеграції", icon: "⚙" },
 ];
 
 function isoNow() {
@@ -320,12 +321,13 @@ function LoginScreen({ initialError }: { initialError?: string }) {
       setBusy(false);
     }
   };
-  return <div className="login-screen"><form className="login-card" onSubmit={(event) => void submit(event)} noValidate><div className="loading-mark">УП</div><span>Захищений доступ</span><h1>Управлінський портал</h1><p>Увійдіть за корпоративною адресою, для якої адміністратор надав доступ.</p><label className={error ? "has-error" : ""}><b>Корпоративна адреса <i className="required-mark">*</i></b><input type="email" autoComplete="username" value={email} onChange={(event) => { setEmail(event.target.value); setError(""); }} placeholder="Наприклад: name@pravdop.com" required aria-invalid={Boolean(error)} /></label><label className={error ? "has-error" : ""}><b>Пароль <i className="required-mark">*</i></b><input type="password" autoComplete="current-password" value={password} onChange={(event) => { setPassword(event.target.value); setError(""); }} placeholder="Введіть виданий адміністратором пароль" required aria-invalid={Boolean(error)} /></label>{error && <div className="login-error" role="alert">{error}</div>}<button type="submit" disabled={busy}>{busy ? "Перевіряємо…" : "Увійти"}</button><small><i className="required-mark">*</i> — обов’язкові поля. Права доступу та паролі користувачів керуються в налаштуваннях порталу.</small></form></div>;
+  return <div className="login-screen"><form className="login-card" onSubmit={(event) => void submit(event)} noValidate><div className="loading-mark logo"><img src="/pravdop-logo.png" alt="Правова Допомога" width={145} height={48} /></div><span>Захищений доступ</span><h1>Управлінський портал</h1><p>Увійдіть за корпоративною адресою, для якої адміністратор надав доступ.</p><label className={error ? "has-error" : ""}><b>Корпоративна адреса <i className="required-mark">*</i></b><input type="email" autoComplete="username" value={email} onChange={(event) => { setEmail(event.target.value); setError(""); }} placeholder="Наприклад: name@pravdop.com" required aria-invalid={Boolean(error)} /></label><label className={error ? "has-error" : ""}><b>Пароль <i className="required-mark">*</i></b><input type="password" autoComplete="current-password" value={password} onChange={(event) => { setPassword(event.target.value); setError(""); }} placeholder="Введіть виданий адміністратором пароль" required aria-invalid={Boolean(error)} /></label>{error && <div className="login-error" role="alert">{error}</div>}<button type="submit" disabled={busy}>{busy ? "Перевіряємо…" : "Увійти"}</button><small><i className="required-mark">*</i> — обов’язкові поля. Права доступу та паролі користувачів керуються в налаштуваннях порталу.</small></form></div>;
 }
 
 export function PortalApp() {
   const [payload, setPayload] = useState<PortalPayload | null>(null);
   const [view, setView] = useState<View>("dashboard");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [selectedId, setSelectedId] = useState("");
   const [modal, setModal] = useState<Modal>(null);
   const [draftNode, setDraftNode] = useState<WorkNode | null>(null);
@@ -345,6 +347,7 @@ export function PortalApp() {
   const draftNodeRef = useRef<WorkNode | null>(null);
   const restoredDraftRef = useRef(false);
   const urlSyncReadyRef = useRef(false);
+  const sidebarReadyRef = useRef(false);
 
   const setNotice = useCallback<Notify>((value, tone = "success") => {
     setNoticeState(value);
@@ -356,6 +359,21 @@ export function PortalApp() {
     const timer = window.setTimeout(() => setNoticeState(""), noticeTone === "error" ? 7000 : 3500);
     return () => window.clearTimeout(timer);
   }, [notice, noticeTone]);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem("portal:sidebar-collapsed");
+      // Device-local navigation preference is restored after hydration.
+      if (saved !== null) setSidebarCollapsed(saved === "true");
+    } finally {
+      sidebarReadyRef.current = true;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!sidebarReadyRef.current) return;
+    try { window.localStorage.setItem("portal:sidebar-collapsed", String(sidebarCollapsed)); } catch { /* preference is best-effort */ }
+  }, [sidebarCollapsed]);
 
   const fetchPayload = useCallback(async () => {
     const response = await fetch("/api/state", { cache: "no-store" });
@@ -573,7 +591,7 @@ export function PortalApp() {
     };
   }, [payload]);
 
-  if (!payload || !data) return loadError ? <LoginScreen initialError={loadError.startsWith("Потрібен вхід") ? "" : loadError} /> : <div className="loading-screen"><div className="loading-mark">УП</div><strong>Готуємо управлінський портал…</strong></div>;
+  if (!payload || !data) return loadError ? <LoginScreen initialError={loadError.startsWith("Потрібен вхід") ? "" : loadError} /> : <div className="loading-screen"><div className="loading-mark logo"><img src="/pravdop-logo.png" alt="Правова Допомога" width={145} height={48} /></div><strong>Готуємо управлінський портал…</strong></div>;
 
   const userById = (id: string) => payload.users.find((user) => user.id === id);
   const selected = payload.nodes.find((node) => node.id === selectedId && !node.archived) || payload.nodes.find((node) => !node.archived);
@@ -747,17 +765,18 @@ export function PortalApp() {
   };
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
       {notice && <div className={`global-notice ${noticeTone}`} role={noticeTone === "error" ? "alert" : "status"} aria-live={noticeTone === "error" ? "assertive" : "polite"}><span>{noticeTone === "error" ? "!" : "✓"}</span><strong>{notice}</strong><button type="button" onClick={() => setNoticeState("")} aria-label="Закрити повідомлення">×</button></div>}
       <aside className="sidebar">
         <div className="brand-block">
-          <div className="brand-mark">УП</div>
+          <div className="brand-logo"><img src="/pravdop-logo.png" alt="Правова Допомога" width={145} height={48} /></div>
           <div><strong>Управлінський портал</strong><span>{payload.settings.organizationName}</span></div>
+          <button className="sidebar-toggle" type="button" aria-label={sidebarCollapsed ? "Розгорнути бічне меню" : "Згорнути бічне меню"} title={sidebarCollapsed ? "Розгорнути меню" : "Згорнути меню"} onClick={() => setSidebarCollapsed((value) => !value)}>{sidebarCollapsed ? "›" : "‹"}</button>
         </div>
         <nav aria-label="Основна навігація">
           {nav.map((item) => (
             <button key={item.id} className={view === item.id ? "active" : ""} title={item.label} onClick={() => setView(item.id)}>
-              <span className="nav-mark">{item.mark}</span><span><strong>{item.label}</strong><small>{item.hint}</small></span>
+              <span className="nav-mark" aria-hidden="true">{item.icon}</span><span><strong>{item.label}</strong><small>{item.hint}</small></span>
             </button>
           ))}
         </nav>
@@ -770,7 +789,7 @@ export function PortalApp() {
       <section className="workspace">
         <header className="topbar">
           <div className="topbar-context">
-            <span>{nav.find((item) => item.id === view)?.mark}</span>
+            <span aria-hidden="true">{nav.find((item) => item.id === view)?.icon}</span>
             <div><strong>{nav.find((item) => item.id === view)?.label}</strong><small>Єдине дерево відповідальності й результатів</small></div>
           </div>
           <div className="topbar-actions">
