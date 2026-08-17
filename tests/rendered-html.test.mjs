@@ -92,7 +92,10 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /portal:node-draft/);
   assert.match(source, /Дані автоматично оновлено/);
   assert.match(source, /Питання, погодження та коментарі/);
-  assert.match(source, /Обрати ціль, цикл або завдання/);
+  assert.match(source, /Обрати картку/);
+  assert.match(source, /work-advanced-filters/);
+  assert.match(source, /Скинути фільтри/);
+  assert.doesNotMatch(source, /Робочий контур/);
   assert.match(source, /Координація за циклами й підциклами/);
   assert.match(source, /Статус Завдання|parent\.health = state\.blockers/);
   assert.doesNotMatch(source, /Дерево УО|Створити УО|Паспорт УО|Нижчі УО|Тут виконується УО/);
