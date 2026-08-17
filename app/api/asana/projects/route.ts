@@ -14,9 +14,9 @@ export async function GET(request: Request) {
     const workspaces = me.data?.workspaces || [];
     const batches = await Promise.all(workspaces.map(async (workspace) => {
       const response = await asanaRequest(user.id, `/projects?workspace=${encodeURIComponent(workspace.gid)}&archived=false&limit=100&opt_fields=name,workspace.name`) as AsanaEnvelope<Project[]>;
-      return (response.data || []).map((project) => ({ gid: project.gid, name: project.name, workspace: workspace.name }));
+      return (response.data || []).map((project) => ({ gid: project.gid, name: project.name, workspace: workspace.name, workspaceGid: workspace.gid }));
     }));
-    return Response.json({ projects: batches.flat().sort((a, b) => a.name.localeCompare(b.name, "uk")) });
+    return Response.json({ workspaces, projects: batches.flat().sort((a, b) => a.name.localeCompare(b.name, "uk")) });
   } catch (cause) {
     return jsonError(cause instanceof Error ? cause.message : "Не вдалося отримати проєкти Asana", 502);
   }

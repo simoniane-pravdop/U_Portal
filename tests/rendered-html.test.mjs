@@ -83,6 +83,9 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /api\/auth\/password/);
   assert.match(source, /api\/admin\/users/);
   assert.match(source, /Створити в Asana й прив’язати/);
+  assert.match(source, /Мої завдання ·/);
+  assert.match(source, /без проєкту/);
+  assert.match(source, /workspaceGid/);
   assert.match(source, /Перевірити й прив’язати/);
   assert.match(source, /Asana автоматично додається до «Контрольного місця»/);
   assert.match(source, /Є ризик виконання/);

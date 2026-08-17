@@ -6,6 +6,7 @@ type SyncBody = {
   nodeId: string;
   taskGid?: string;
   projectGid?: string;
+  workspaceGid?: string;
   title?: string;
   description?: string;
   dueOn?: string;
@@ -30,7 +31,7 @@ export async function POST(request: Request) {
         `/tasks/${encodeURIComponent(body.taskGid)}?opt_fields=name,completed,due_on,start_on,assignee.name,assignee.email,permalink_url,modified_at,notes`,
       );
     } else if (body.action === "create") {
-      if (!body.projectGid) return jsonError("Не вказано проєкт Asana", 400);
+      if (!body.projectGid && !body.workspaceGid) return jsonError("Не вказано робочий простір Asana", 400);
       const db = await database();
       const connection = db ? await db.prepare("SELECT asana_user_gid FROM asana_connections WHERE user_id = ?").bind(user.id).first<{ asana_user_gid: string }>() : null;
       result = await asanaRequest(user.id, "/tasks", {
@@ -39,7 +40,7 @@ export async function POST(request: Request) {
           data: {
             name: body.title || node.title,
             notes: body.description || `${node.code}\n\n${node.result}\n\nКритерій приймання: ${node.acceptanceCriteria}`,
-            projects: [body.projectGid],
+            ...(body.projectGid ? { projects: [body.projectGid] } : { workspace: body.workspaceGid }),
             due_on: body.dueOn || node.plannedEnd || undefined,
             assignee: connection?.asana_user_gid || undefined,
           },
