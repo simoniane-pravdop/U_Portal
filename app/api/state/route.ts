@@ -68,7 +68,7 @@ export async function POST(request: Request) {
   collectChanged(current.blockers, body.state.blockers, (item) => [item.nodeId]);
   collectChanged(current.decisions, body.state.decisions, (item) => [item.nodeId]);
   collectChanged(current.acceptances, body.state.acceptances, (item) => [item.nodeId]);
-  collectChanged(current.coordinations, body.state.coordinations, (item) => [item.subcycleId]);
+  collectChanged(current.coordinations, body.state.coordinations, (item) => [item.cycleId || item.subcycleId]);
   const discussionIds = new Set([...(current.discussions || []).map((item) => item.id), ...(body.state.discussions || []).map((item) => item.id)]);
   for (const id of discussionIds) {
     const before = (current.discussions || []).find((item) => item.id === id);

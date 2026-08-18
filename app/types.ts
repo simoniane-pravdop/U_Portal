@@ -168,6 +168,7 @@ export type Acceptance = {
 export type CoordinationSnapshot = {
   id: string;
   subcycleId: string;
+  cycleId?: string;
   title?: string;
   path?: string;
   date: string;

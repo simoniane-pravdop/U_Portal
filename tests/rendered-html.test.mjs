@@ -124,7 +124,7 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /Учасники \/ фоловери/);
   assert.match(source, /Завершено в Asana/);
   assert.match(source, /Шлях координації/);
-  assert.match(source, /Координація \$\{node\.code\}: \$\{node\.title\}/);
+  assert.match(source, /Координація циклу \$\{node\.code\}: \$\{node\.title\}/);
   assert.match(source, /Рівень управління/);
   assert.match(source, /Усі цілі/);
   assert.match(source, /Усі цикли/);
@@ -135,7 +135,12 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /Скинути фільтри/);
   assert.match(source, /Редагувати картку/);
   assert.doesNotMatch(source, /Робочий контур/);
-  assert.match(source, /Координація за циклами й підциклами/);
+  assert.match(source, /Координація за управлінськими циклами/);
+  assert.match(source, /Предмет координації — зведений стан усіх завдань циклу/);
+  assert.match(source, /Зведення за завданнями/);
+  assert.match(source, /Нова координація циклу/);
+  assert.match(source, /selected\?\.kind === "cycle"/);
+  assert.doesNotMatch(source, /Одиниця координації — підцикл/);
   assert.match(source, /Статус Завдання|parent\.health = state\.blockers/);
   assert.doesNotMatch(source, /Дерево УО|Створити УО|Паспорт УО|Нижчі УО|Тут виконується УО/);
   assert.doesNotMatch(source, /id: "integrations"/);

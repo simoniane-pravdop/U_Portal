@@ -726,9 +726,18 @@ tbody tr:hover { background: #f8fafc; }
 .detail-tabs .history-tab.active { color: #fff; border-color: var(--navy-800); background: var(--navy-800); }
 .update-panel { border: 2px solid #d8c489; background: #fffdf7; }
 .coordination-task-list { display: grid; gap: 4px; padding: 0 14px 12px; }
+.coordination-subcycles { display: grid; gap: 4px; padding: 0 14px 12px; }
+.coordination-subcycles > div, .coordination-list-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 1px; color: var(--muted); font-size: 7px; font-weight: 850; text-transform: uppercase; }
+.coordination-subcycles > button { display: grid; grid-template-columns: 55px minmax(0, 1fr) 70px 35px auto; align-items: center; gap: 6px; padding: 7px 8px; text-align: left; border: 1px solid #d9e2ea; border-radius: 6px; background: #f7fafc; }
+.coordination-subcycles > button > span { color: var(--navy-700); font: 800 8px Georgia, serif; }
+.coordination-subcycles > button > strong { overflow: hidden; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.coordination-subcycles > button > small { color: var(--muted); font-size: 7px; }
+.coordination-subcycles > button > em { color: var(--navy-700); font-size: 8px; font-style: normal; font-weight: 850; }
+.coordination-subcycles > .empty-state, .coordination-task-list > .empty-state { padding: 8px; }
 .coordination-task-list button { display: grid; grid-template-columns: 55px minmax(0, 1fr) 35px auto; align-items: center; gap: 6px; padding: 7px 8px; text-align: left; border: 1px solid var(--line-soft); border-radius: 6px; background: #fff; }
 .coordination-task-list span { color: var(--gold); font-size: 8px; font-weight: 850; }
 .coordination-task-list strong { overflow: hidden; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.coordination-task-list strong small { display: block; margin-top: 2px; color: var(--muted); font-size: 6px; font-weight: 700; }
 .coordination-task-list em { color: var(--navy-700); font-size: 8px; font-style: normal; font-weight: 850; }
 .positive { color: var(--green); border: 1px solid #abd7c5; background: var(--green-soft); }
 .positive:disabled { cursor: not-allowed; opacity: .5; }
@@ -861,6 +870,7 @@ tbody tr:hover { background: #f8fafc; }
   .detail-grid { grid-template-columns: 1fr 1fr; }
   .detail-columns { grid-template-columns: 1fr; }
   .metric-grid, .report-metrics { grid-template-columns: 1fr 1fr; }
+  .coordination-list { grid-template-columns: 1fr; }
   .my-workbench { grid-template-columns: 225px minmax(0, 1fr); }
   .execution-grid { grid-template-columns: 1fr; }
   .work-summary-grid { grid-template-columns: 1fr 1fr; }
@@ -997,6 +1007,9 @@ tbody tr:hover { background: #f8fafc; }
   .coordination-questions button small { grid-column: 2; }
   .coordination-task-list button { grid-template-columns: 48px minmax(0, 1fr) 30px; }
   .coordination-task-list .health-badge { grid-column: 2 / -1; }
+  .coordination-subcycles > button { grid-template-columns: 48px minmax(0, 1fr) 30px; }
+  .coordination-subcycles > button > small { grid-column: 2; }
+  .coordination-subcycles > button > .health-badge { grid-column: 2 / -1; }
   .asana-link-form, .asana-create-form, .asana-search-form { grid-template-columns: 1fr; }
   .asana-linked-card { align-items: stretch; flex-direction: column; }
   .asana-linked-card > div:last-child { justify-content: flex-start; }
