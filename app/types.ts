@@ -34,6 +34,7 @@ export type Evidence = {
 export type WorkUpdate = {
   id: string;
   lifecycle: LifecycleStatus;
+  lifecycleOverride?: LifecycleStatus | null;
   health: HealthStatus;
   progress: number;
   forecastEnd: string;

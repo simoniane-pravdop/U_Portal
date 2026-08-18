@@ -258,6 +258,7 @@ function blankNode(nodes: WorkNode[], parent: WorkNode | undefined, user: Portal
     acceptorId: parent?.ownerId || user.id,
     participantIds: [],
     lifecycle: "draft",
+    lifecycleOverride: undefined,
     health: "normal",
     decisionRequired: false,
     priority: "normal",
@@ -310,7 +311,8 @@ function recalculateHierarchy(state: PortalState) {
     parent.health = state.blockers.some((item) => item.nodeId === parent.id && item.status === "open") ? "blocked" : "normal";
     parent.decisionRequired = state.decisions.some((item) => item.nodeId === parent.id && item.status === "requested");
     const meaningful = children.filter((child) => child.lifecycle !== "cancelled");
-    if (meaningful.length && meaningful.every((child) => child.lifecycle === "completed")) parent.lifecycle = "completed";
+    if (parent.lifecycleOverride) parent.lifecycle = parent.lifecycleOverride;
+    else if (meaningful.length && meaningful.every((child) => child.lifecycle === "completed")) parent.lifecycle = "completed";
     else if (meaningful.some((child) => ["in_progress", "acceptance", "completed"].includes(child.lifecycle))) parent.lifecycle = "in_progress";
     else if (meaningful.length && meaningful.every((child) => child.lifecycle === "ready")) parent.lifecycle = "ready";
     else if (meaningful.length && meaningful.every((child) => child.lifecycle === "paused")) parent.lifecycle = "paused";
@@ -693,6 +695,7 @@ export function PortalApp() {
     if (!draftNode.ownerId) errors.ownerId = "Оберіть власника результату.";
     if (!draftNode.assigneeId) errors.assigneeId = "Оберіть виконавця або координатора.";
     if (!draftNode.acceptorId) errors.acceptorId = "Оберіть того, хто приймає результат.";
+    if (draftNode.lifecycleOverride === "completed" && completionBlockReason(payload.nodes, draftNode)) errors.lifecycle = completionBlockReason(payload.nodes, draftNode);
     if (Object.keys(errors).length) {
       setNodeErrors(errors);
       setNotice("Не вдалося зберегти: перевірте виділені обов’язкові поля.", "error");
@@ -1261,7 +1264,7 @@ function CoordinationView({ payload, userById, select, open }: { payload: Portal
   const [query, setQuery] = useState("");
   const [ownerId, setOwnerId] = useState("all");
   const [state, setState] = useState<"all" | "risk" | "active" | "completed">("all");
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(() => new Set(payload.nodes.filter((node) => node.kind === "goal" || node.kind === "cycle").map((node) => node.id)));
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(() => new Set());
   const activeNodes = payload.nodes.filter((node) => !node.archived);
   const units = payload.nodes.filter((node) => node.kind === "cycle" && !node.archived).map((node) => {
     const branch = descendants(activeNodes, node.id);
@@ -1291,13 +1294,10 @@ function CoordinationView({ payload, userById, select, open }: { payload: Portal
       }
     }
   }
-  const goals = activeNodes.filter((node) => node.kind === "goal" && units.some((unit) => unit.node.parentId === node.id));
-  const orphanCycles = units.filter((unit) => !unit.node.parentId || !goals.some((goal) => goal.id === unit.node.parentId)).map((unit) => unit.node);
   const toggleRow = (id: string) => setExpandedRows((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
-  const expandStructure = () => setExpandedRows(new Set(activeNodes.filter((node) => tableIds.has(node.id) && node.kind !== "task").map((node) => node.id)));
+  const expandStructure = () => setExpandedRows(new Set(activeNodes.filter((node) => tableIds.has(node.id) && (node.kind === "cycle" || node.kind === "subcycle")).map((node) => node.id)));
   const expandWithReports = () => setExpandedRows(new Set(activeNodes.filter((node) => tableIds.has(node.id)).map((node) => node.id)));
   const childNodes = (node: WorkNode) => {
-    if (node.kind === "goal") return units.map((unit) => unit.node).filter((cycle) => cycle.parentId === node.id);
     return activeNodes.filter((candidate) => candidate.parentId === node.id && (candidate.kind === "subcycle" || candidate.kind === "task") && tableIds.has(candidate.id));
   };
   const renderCoordinationRow = (node: WorkNode, depth = 0): React.ReactNode => {
@@ -1308,7 +1308,7 @@ function CoordinationView({ payload, userById, select, open }: { payload: Portal
     const reasons = coordinationAttentionReasons(payload, node);
     return <div key={node.id} className={`coordination-tree-branch level-${node.kind}`}>
       <div className="coordination-tree-row" style={{ "--coord-depth": depth } as React.CSSProperties}>
-        <div className="coordination-object-cell"><button className="coordination-expand" disabled={!hasChildren} onClick={() => toggleRow(node.id)} aria-label={opened ? "Згорнути рівень" : "Розгорнути рівень"}>{hasChildren ? opened ? "⌄" : "›" : "·"}</button><button className="coordination-object" onClick={() => select(node.id)}><span>{node.code}</span><strong>{node.title}</strong><small>{node.kind === "cycle" ? coordinationCadenceLabel(node) : kindLabels[node.kind]}</small></button></div>
+        <div className="coordination-object-cell"><button className="coordination-expand" disabled={!hasChildren} onClick={() => toggleRow(node.id)} aria-label={opened ? "Згорнути рівень" : "Розгорнути рівень"}>{hasChildren ? opened ? "⌄" : "›" : "·"}</button><button className="coordination-object" onClick={() => select(node.id)}><span>{node.code}</span><strong>{node.title}</strong><small>{node.kind === "cycle" ? `${payload.nodes.find((item) => item.id === node.parentId)?.code || "Без цілі"} · ${coordinationCadenceLabel(node)}` : kindLabels[node.kind]}</small></button></div>
         <span className="coordination-owner">{userById(node.assigneeId)?.name || "—"}</span><StatusBadge node={node} /><span className="coordination-progress">{node.progress}%</span><time>{dateLabel(node.plannedEnd)}</time><div className="coordination-row-attention">{reasons.slice(0, 2).map((reason) => <span key={reason}>{reason}</span>)}{reasons.length > 2 && <b>+{reasons.length - 2}</b>}{node.kind === "cycle" && <button onClick={() => open(node)}>Координація</button>}</div>
       </div>
       {opened && children.map((child) => renderCoordinationRow(child, depth + 1))}
@@ -1317,7 +1317,7 @@ function CoordinationView({ payload, userById, select, open }: { payload: Portal
   };
   return <><PageIntro kicker="Одиниця координації" title="Координація за управлінськими циклами" text="Предмет координації — зведений стан усіх завдань циклу з розрізом за підциклами, строками, блокерами, рішеннями та прийманням." actions={<div className="page-filter-bar"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Пошук циклу, підциклу або завдання…" /><select value={ownerId} onChange={(event) => setOwnerId(event.target.value)}><option value="all">Усі відповідальні</option>{payload.users.filter((user) => user.active).map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select><select value={state} onChange={(event) => setState(event.target.value as typeof state)}><option value="all">Усі стани</option><option value="active">Активні цикли</option><option value="risk">Є ризик у гілці</option><option value="completed">Завершені цикли</option></select></div>} />
     <section className="panel coordination-attention"><div className="panel-head"><div><span>Контроль і реакція</span><h2>Потребує координації</h2></div><b className="count amber">{attentionNodes.length}</b></div><div className="coordination-attention-table"><div className="coordination-attention-head"><span>Об’єкт</span><span>Причини</span><span>Відповідальний</span><span>Строк</span></div>{attentionNodes.map(({ node, reasons }) => <button key={node.id} onClick={() => select(node.id)}><div><span>{node.code} · {kindLabels[node.kind]}</span><strong>{node.title}</strong></div><div>{reasons.map((reason) => <span key={reason}>{reason}</span>)}</div><span>{userById(node.assigneeId)?.name || "—"}</span><time>{dateLabel(node.plannedEnd)}</time></button>)}{!attentionNodes.length && <p className="empty-state padded">За вибраними фільтрами немає об’єктів, що потребують координації.</p>}</div></section>
-    <section className="panel coordination-tree-table"><div className="panel-head"><div><span>Зведена звітність циклів</span><h2>Ціль → цикл → підцикл → завдання → три останні звіти</h2></div><div className="coordination-tree-controls"><button onClick={expandStructure}>Розгорнути рівні</button><button onClick={expandWithReports}>Показати звіти</button><button onClick={() => setExpandedRows(new Set())}>Згорнути все</button><b className="count">{units.length}</b></div></div><div className="coordination-tree-head"><span>Об’єкт управління</span><span>Відповідальний</span><span>Статус</span><span>Прогрес</span><span>Строк</span><span>Увага / дія</span></div><div className="coordination-tree-body">{goals.map((goal) => renderCoordinationRow(goal))}{orphanCycles.map((cycle) => renderCoordinationRow(cycle))}{!units.length && <p className="empty-state padded">За вибраними фільтрами управлінських циклів немає.</p>}</div></section>
+    <section className="panel coordination-tree-table"><div className="panel-head"><div><span>Зведена звітність циклів</span><h2>Цикл → підцикл → завдання → три останні звіти</h2></div><div className="coordination-tree-controls"><button onClick={expandStructure}>Розгорнути рівні</button><button onClick={expandWithReports}>Показати звіти</button><button onClick={() => setExpandedRows(new Set())}>Згорнути все</button><b className="count">{units.length}</b></div></div><div className="coordination-tree-head"><span>Об’єкт управління</span><span>Відповідальний</span><span>Статус</span><span>Прогрес</span><span>Строк</span><span>Увага / дія</span></div><div className="coordination-tree-body">{units.map((unit) => renderCoordinationRow(unit.node))}{!units.length && <p className="empty-state padded">За вибраними фільтрами управлінських циклів немає.</p>}</div></section>
   </>;
 }
 
@@ -1579,6 +1579,7 @@ function NodeModal({ node, setNode, nodes, users, errors, clearError, close, sav
   const allowedParents = allowedParentKinds(node.kind);
   const validParents = allowedParents.length ? nodes.filter((item) => allowedParents.includes(item.kind) && !item.archived && item.id !== node.id) : [];
   const path = nodePath(nodes.filter((item) => item.id !== node.id).concat(node), node);
+  const hasChildren = nodes.some((item) => item.parentId === node.id && !item.archived);
   const controlPlaces = node.controlPlace ? node.controlPlace.split("\n") : [""];
   const setControlPlace = (index: number, value: string) => update("controlPlace", controlPlaces.map((item, itemIndex) => itemIndex === index ? value : item).join("\n"));
   return <ModalShell title={`${node.code} · ${node.title || "Новий об’єкт"}`} subtitle={kindLabels[node.kind]} close={close} footer={<><button onClick={close}>Скасувати</button><button className="primary" onClick={save}>Зберегти</button></>}>
@@ -1596,6 +1597,7 @@ function NodeModal({ node, setNode, nodes, users, errors, clearError, close, sav
       <Field label="Виконавець" required error={errors.assigneeId} hint="Людина, яка виконує завдання або координує нижчі рівні."><select value={node.assigneeId} aria-invalid={Boolean(errors.assigneeId)} onChange={(event) => update("assigneeId", event.target.value)}>{users.filter((user) => user.active).map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></Field>
       <Field label="Приймає результат" required error={errors.acceptorId} hint="Перевіряє результат за критерієм приймання та приймає або повертає його."><select value={node.acceptorId} aria-invalid={Boolean(errors.acceptorId)} onChange={(event) => update("acceptorId", event.target.value)}>{users.filter((user) => user.active).map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></Field>
       <Field label="Пріоритет" required hint="Визначає порядок управлінської уваги, якщо одночасно конкурують кілька робіт."><select value={node.priority} onChange={(event) => update("priority", event.target.value as WorkNode["priority"])}><option value="critical">Критичний</option><option value="high">Високий</option><option value="normal">Нормальний</option><option value="low">Низький</option></select></Field>
+      {node.kind !== "task" && <Field label="Статус" required error={errors.lifecycle} hint={hasChildren ? "Автоматичний режим розраховує статус із нижчих рівнів. Оберіть конкретний статус, якщо потрібне явне управлінське переведення." : "Оберіть фактичний стан цілі, циклу або підциклу. Після появи нижчих рівнів можна перейти на автоматичний розрахунок."}><select value={node.lifecycleOverride || (hasChildren ? "automatic" : node.lifecycle)} aria-invalid={Boolean(errors.lifecycle)} onChange={(event) => { clearError("lifecycle"); const value = event.target.value; if (value === "automatic") setNode({ ...node, lifecycleOverride: undefined }); else { const lifecycle = value as LifecycleStatus; setNode({ ...node, lifecycle, lifecycleOverride: lifecycle, progress: lifecycle === "completed" ? 100 : node.progress, actualEnd: lifecycle === "completed" ? isoNow().slice(0, 10) : node.actualEnd }); } }}>{hasChildren && <option value="automatic">Автоматично з нижчих рівнів</option>}{Object.entries(lifecycleLabels).map(([value, label]) => <option key={value} value={value} disabled={value === "completed" && Boolean(completionBlockReason(nodes, node))}>{label}</option>)}</select></Field>}
       <Field wide label="Учасники / фоловери" hint="Особи, які бачать зміни картки та отримують сповіщення. Після зв’язування з Asana вони додаються фоловерами задачі за корпоративною адресою."><div className="participant-picker">{users.filter((user) => user.active).map((user) => <label key={user.id}><input type="checkbox" checked={node.participantIds.includes(user.id)} onChange={(event) => update("participantIds", event.target.checked ? [...node.participantIds, user.id] : node.participantIds.filter((id) => id !== user.id))} /><span>{user.name}</span></label>)}</div></Field>
       <Field label="Початок" hint="Планова дата, якщо її можна визначити наперед."><input type="date" value={node.plannedStart} onChange={(event) => update("plannedStart", event.target.value)} /></Field>
       <Field label="Завершення" hint="Погоджений плановий строк готового результату."><input type="date" value={node.plannedEnd} onChange={(event) => update("plannedEnd", event.target.value)} /></Field>
