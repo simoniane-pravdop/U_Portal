@@ -1422,6 +1422,20 @@ function AsanaSyncPanel({ payload, selected, asanaStatus, mutate, setNotice, com
     });
     if (ok) { setDraft({ taskGid: "", projectGid: "", workspaceGid: "", mode: "link" }); clearDraft(); }
   };
+  const disconnectAccount = async () => {
+    if (!window.confirm("Відключити ваш Asana-акаунт від порталу? Задачі в Asana та збережені посилання в картках не видалятимуться.")) return;
+    setBusy(true); setNotice("");
+    try {
+      const response = await fetch("/api/asana/disconnect", { method: "POST" });
+      const result = (await response.json()) as { error?: string; warning?: string };
+      if (!response.ok) throw new Error(result.error || "Не вдалося відключити Asana-акаунт");
+      setNotice(result.warning || "Asana-акаунт відключено");
+      window.setTimeout(() => window.location.assign("/?view=settings&asana=disconnected"), 600);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Не вдалося відключити Asana-акаунт", "error");
+      setBusy(false);
+    }
+  };
   const effectiveWorkspaceGid = workspaceGid || (!projectGid && asanaWorkspaces.length === 1 ? asanaWorkspaces[0].gid : "");
   const destinationValue = projectGid ? `project:${projectGid}` : effectiveWorkspaceGid ? `workspace:${effectiveWorkspaceGid}` : "";
   const destinationField = asanaWorkspaces.length ? <select value={destinationValue} onChange={(event) => { const [kind, gid] = event.target.value.split(":"); const project = asanaProjects.find((item) => item.gid === gid); setDraft({ ...draft, projectGid: kind === "project" ? gid : "", workspaceGid: kind === "workspace" ? gid : project?.workspaceGid || "" }); }}><option value="">Оберіть місце створення</option>{asanaWorkspaces.map((workspace) => <option key={`workspace:${workspace.gid}`} value={`workspace:${workspace.gid}`}>Мої завдання · {workspace.name} (без проєкту)</option>)}{asanaProjects.map((project) => <option key={`project:${project.gid}`} value={`project:${project.gid}`}>{project.name} · {project.workspace}</option>)}</select> : <input value={workspaceGid} onChange={(event) => setDraft({ ...draft, projectGid: "", workspaceGid: event.target.value.trim() })} placeholder="GID робочого простору Asana" />;
@@ -1447,7 +1461,7 @@ function AsanaSyncPanel({ payload, selected, asanaStatus, mutate, setNotice, com
     <p className="sync-note">Після прив’язування Asana автоматично додається до «Контрольного місця». Портал зберігає управлінський результат, а Asana — фактичне виконання.</p>
   </section>;
   if (compact) return syncPanel;
-  return <><div className="integration-grid single"><section className="panel integration-main"><div className="integration-brand"><div className="asana-logo">A</div><div><span>Asana</span><h2>{asanaStatus?.connected ? "Особистий акаунт підключено" : "Підключення очікується"}</h2><p>{asanaStatus?.configured ? "OAuth налаштовано. Після підключення можна створювати, отримувати та передавати зміни задач." : "Потрібні ключі Asana OAuth-застосунку для цього середовища."}</p></div><span className={`connection-state ${asanaStatus?.connected ? "connected" : ""}`}>{asanaStatus?.connected ? "Підключено" : "Не підключено"}</span></div>{asanaStatus?.connected ? <div className="connected-user"><strong>{String(asanaStatus.connection?.asana_user_name || payload.currentUser.name)}</strong><small>Зміни виконуватимуться від цього користувача</small></div> : <a className={`button-link ${!asanaStatus?.configured ? "disabled" : ""}`} href={asanaStatus?.configured ? "/api/asana/start" : undefined}>Підключити мій Asana-акаунт</a>}</section></div>{syncPanel}</>;
+  return <><div className="integration-grid single"><section className="panel integration-main"><div className="integration-brand"><div className="asana-logo">A</div><div><span>Asana</span><h2>{asanaStatus?.connected ? "Особистий акаунт підключено" : "Підключення очікується"}</h2><p>{asanaStatus?.configured ? "OAuth налаштовано. Після підключення можна створювати, отримувати та передавати зміни задач." : "Потрібні ключі Asana OAuth-застосунку для цього середовища."}</p></div><span className={`connection-state ${asanaStatus?.connected ? "connected" : ""}`}>{asanaStatus?.connected ? "Підключено" : "Не підключено"}</span></div>{asanaStatus?.connected ? <div className="connected-user"><div><strong>{String(asanaStatus.connection?.asana_user_name || payload.currentUser.name)}</strong><small>Зміни виконуватимуться від цього користувача. Відключення не видаляє задачі та зв’язки карток.</small></div><div className="asana-account-actions"><a href="/api/asana/start">Перепідключити акаунт</a><button className="danger" disabled={busy} onClick={() => void disconnectAccount()}>{busy ? "Відключаємо…" : "Відключити акаунт"}</button></div></div> : <a className={`button-link ${!asanaStatus?.configured ? "disabled" : ""}`} href={asanaStatus?.configured ? "/api/asana/start" : undefined}>Підключити мій Asana-акаунт</a>}</section></div>{syncPanel}</>;
 }
 
 function TelegramPanel({ payload, status, setStatus, notify }: { payload: PortalPayload; status: TelegramStatus | null; setStatus: (status: TelegramStatus) => void; notify: Notify }) {

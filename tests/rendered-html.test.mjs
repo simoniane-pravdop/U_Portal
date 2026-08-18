@@ -76,6 +76,9 @@ test("durable storage and integration bindings are declared", async () => {
   const asanaSearch = await readFile(new URL("../app/api/asana/tasks/search/route.ts", import.meta.url), "utf8");
   assert.match(asanaSearch, /резервний|fallbackParams/);
   assert.match(asanaSearch, /completed_since/);
+  const asanaDisconnect = await readFile(new URL("../app/api/asana/disconnect/route.ts", import.meta.url), "utf8");
+  assert.match(asanaDisconnect, /oauth_revoke/);
+  assert.match(asanaDisconnect, /DELETE FROM asana_connections/);
   const stateRoute = await readFile(new URL("../app/api/state/route.ts", import.meta.url), "utf8");
   assert.match(stateRoute, /next\.notifications\.unshift/);
   assert.match(stateRoute, /startsWith\("Сповіщення"\)/);
@@ -128,6 +131,8 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /Прийняття рішення/);
   assert.match(source, /Учасники \/ фоловери/);
   assert.match(source, /Завершено в Asana/);
+  assert.match(source, /Перепідключити акаунт/);
+  assert.match(source, /Відключити акаунт/);
   assert.match(source, /Шлях координації/);
   assert.match(source, /Координація циклу \$\{node\.code\}: \$\{node\.title\}/);
   assert.match(source, /Рівень управління/);

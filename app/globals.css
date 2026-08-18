@@ -301,9 +301,13 @@ tbody tr:hover { background: #f8fafc; }
 .integration-brand p, .panel-copy { margin: 0; color: var(--muted); font-size: 9px; line-height: 1.5; }
 .connection-state, .planned-label { padding: 5px 7px; border-radius: 999px; color: var(--amber); background: var(--amber-soft); font-size: 8px; font-weight: 850; }
 .connection-state.connected { color: var(--green); background: var(--green-soft); }
-.connected-user { display: grid; gap: 3px; margin-top: 14px; padding: 10px; border-radius: 8px; background: #f5f8fb; }
+.connected-user { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; margin-top: 14px; padding: 10px; border-radius: 8px; background: #f5f8fb; }
+.connected-user > div:first-child { min-width: 0; display: grid; gap: 3px; }
 .connected-user strong { font-size: 10px; }
 .connected-user small { color: var(--muted); font-size: 8px; }
+.asana-account-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.asana-account-actions a, .asana-account-actions button { padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; color: var(--navy-700); background: #fff; font-size: 8px; font-weight: 800; }
+.asana-account-actions button.danger { color: var(--red); border-color: #e9bdc0; background: var(--red-soft); }
 .telegram-panel { margin-top: 13px; padding: 17px; }
 .telegram-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 14px; }
 .telegram-actions button { padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; color: var(--navy-800); background: #fff; font-size: 9px; font-weight: 800; }
@@ -1046,6 +1050,8 @@ tbody tr:hover { background: #f8fafc; }
 
 @media (max-width: 520px) {
   .user-switch strong, .user-switch small { max-width: 100px; }
+  .connected-user { grid-template-columns: 1fr; }
+  .asana-account-actions { justify-content: flex-start; }
   .metric-grid, .report-metrics, .detail-grid, .sync-grid, .form-grid { grid-template-columns: 1fr; }
   .form-grid label.wide { grid-column: auto; }
   .goal-card { grid-template-columns: 42px 1fr; }
