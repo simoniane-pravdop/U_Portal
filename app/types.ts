@@ -48,9 +48,15 @@ export type AsanaLink = {
   taskGid: string;
   taskUrl: string;
   projectGid: string;
+  workspaceGid?: string;
   sectionGid: string;
   lastSyncedAt: string | null;
   syncState: "not_linked" | "linked" | "pending" | "conflict" | "error";
+  remoteName?: string;
+  remoteCompleted?: boolean;
+  remoteDueOn?: string;
+  remoteAssignee?: string;
+  remoteFollowerCount?: number;
   rules: {
     title: SyncRule;
     assignee: SyncRule;
@@ -162,6 +168,8 @@ export type Acceptance = {
 export type CoordinationSnapshot = {
   id: string;
   subcycleId: string;
+  title?: string;
+  path?: string;
   date: string;
   facilitatorId: string;
   summary: string;
@@ -183,8 +191,12 @@ export type DiscussionMessage = {
   nodeId: string;
   authorId: string;
   text: string;
-  kind: "comment" | "question" | "approval" | "system";
+  kind: "comment" | "question" | "decision" | "approval" | "system";
   createdAt: string;
+  recipientId?: string;
+  replyToId?: string;
+  relatedType?: "decision" | "acceptance";
+  relatedId?: string;
   resolvedAt?: string;
   resolvedBy?: string;
 };
@@ -205,6 +217,18 @@ export type AuditEntry = {
   entityId: string;
 };
 
+export type PortalNotification = {
+  id: string;
+  userId: string;
+  actorId: string;
+  nodeId: string;
+  type: "delegation" | "question" | "decision" | "acceptance" | "comment" | "created" | "updated" | "completed";
+  title: string;
+  detail: string;
+  createdAt: string;
+  readAt: string;
+};
+
 export type PortalState = {
   version: number;
   revision: number;
@@ -216,6 +240,7 @@ export type PortalState = {
   acceptances: Acceptance[];
   coordinations: CoordinationSnapshot[];
   discussions: DiscussionMessage[];
+  notifications: PortalNotification[];
   audit: AuditEntry[];
   settings: {
     organizationName: string;

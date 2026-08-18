@@ -70,6 +70,12 @@ test("durable storage and integration bindings are declared", async () => {
   const collaborationMigration = await readFile(new URL("../db/migrations/0004_collaboration.sql", import.meta.url), "utf8");
   assert.match(collaborationMigration, /CREATE TABLE `portal_edit_locks`/);
   assert.match(collaborationMigration, /CREATE TABLE `portal_entity_versions`/);
+  const asanaSync = await readFile(new URL("../app/api/asana/sync/route.ts", import.meta.url), "utf8");
+  assert.match(asanaSync, /addFollowers/);
+  assert.match(asanaSync, /followers\.gid/);
+  const stateRoute = await readFile(new URL("../app/api/state/route.ts", import.meta.url), "utf8");
+  assert.match(stateRoute, /next\.notifications\.unshift/);
+  assert.match(stateRoute, /startsWith\("Сповіщення"\)/);
 });
 
 test("management workflow separates structure, work, dashboard, settings, and access", async () => {
@@ -109,7 +115,16 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /Завдання можна включити безпосередньо в управлінський цикл або в його підцикл/);
   assert.match(source, /portal:node-draft/);
   assert.match(source, /Дані автоматично оновлено/);
-  assert.match(source, /Питання, погодження та коментарі/);
+  assert.match(source, /Питання, рішення, погодження та коментарі/);
+  assert.match(source, /Вхідні та сповіщення/);
+  assert.match(source, /Повернути з коментарем/);
+  assert.match(source, /Зафіксувати інше рішення/);
+  assert.match(source, /Прийняте рішення/);
+  assert.match(source, /Прийняття рішення/);
+  assert.match(source, /Учасники \/ фоловери/);
+  assert.match(source, /Завершено в Asana/);
+  assert.match(source, /Шлях координації/);
+  assert.match(source, /Координація \$\{node\.code\}: \$\{node\.title\}/);
   assert.match(source, /Рівень управління/);
   assert.match(source, /Усі цілі/);
   assert.match(source, /Усі цикли/);

@@ -26,6 +26,7 @@
   "acceptances": [],
   "coordinations": [],
   "discussions": [],
+  "notifications": [],
   "audit": [
     {
       "id": "audit-initial-access",

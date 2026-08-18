@@ -219,6 +219,7 @@ export async function loadState(): Promise<{ state: PortalState; storage: "datab
       state.revision = row.revision;
     }
     state.discussions = Array.isArray(state.discussions) ? state.discussions : [];
+    state.notifications = Array.isArray(state.notifications) ? state.notifications : [];
     return { state, storage: "database" };
   }
   const state = seedState();

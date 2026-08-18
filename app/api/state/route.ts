@@ -1,6 +1,6 @@
 import { baseUrl, currentUser, database, jsonError, loadState, mayEdit, runtimeEnv } from "../../lib/server";
 import { notifyTelegramUsers } from "../../lib/telegram";
-import type { PortalState } from "../../types";
+import type { PortalNotification, PortalState } from "../../types";
 
 export const dynamic = "force-dynamic";
 
@@ -76,13 +76,27 @@ export async function POST(request: Request) {
     if (JSON.stringify(before) === JSON.stringify(after)) continue;
     const nodeId = after?.nodeId || before?.nodeId;
     const node = current.nodes.find((candidate) => candidate.id === nodeId) || body.state.nodes.find((candidate) => candidate.id === nodeId);
-    if (!node || !(mayEdit(user, node.ownerId) || node.assigneeId === user.id || node.acceptorId === user.id || node.participantIds.includes(user.id))) {
+    const addressed = [...(current.discussions || []), ...(body.state.discussions || [])].some((message) => message.nodeId === nodeId && message.recipientId === user.id);
+    if (!node || !(mayEdit(user, node.ownerId) || node.assigneeId === user.id || node.acceptorId === user.id || node.participantIds.includes(user.id) || addressed)) {
       return jsonError("Недостатньо повноважень для повідомлення в цій картці", 403);
+    }
+  }
+  const currentNotifications = Array.isArray(current.notifications) ? current.notifications : [];
+  const submittedNotifications = Array.isArray(body.state.notifications) ? body.state.notifications : [];
+  if (submittedNotifications.length !== currentNotifications.length) return jsonError("Нові сповіщення формуються системою", 403);
+  for (const submitted of submittedNotifications) {
+    const existing = currentNotifications.find((item) => item.id === submitted.id);
+    if (!existing) return jsonError("Невідоме сповіщення", 403);
+    const { readAt: existingReadAt, ...existingStable } = existing;
+    const { readAt: submittedReadAt, ...submittedStable } = submitted;
+    if (JSON.stringify(existingStable) !== JSON.stringify(submittedStable) || existing.userId !== user.id && existingReadAt !== submittedReadAt || existingReadAt && !submittedReadAt) {
+      return jsonError("Можна змінювати лише стан власного сповіщення", 403);
     }
   }
   for (const id of affectedNodeIds) {
     const node = current.nodes.find((candidate) => candidate.id === id) || body.state.nodes.find((candidate) => candidate.id === id);
-    if (!node || !(mayEdit(user, node.ownerId) || node.assigneeId === user.id || node.acceptorId === user.id)) {
+    const decides = [...current.decisions, ...body.state.decisions].some((decision) => decision.nodeId === id && decision.decisionOwnerId === user.id);
+    if (!node || !(mayEdit(user, node.ownerId) || node.assigneeId === user.id || node.acceptorId === user.id || decides)) {
       return jsonError("Недостатньо повноважень для пов’язаної зміни", 403);
     }
   }
@@ -101,6 +115,55 @@ export async function POST(request: Request) {
   }
 
   const next = body.state;
+  next.notifications = submittedNotifications;
+  if (!body.action?.startsWith("Сповіщення")) {
+    const notifiedUsers = new Set<string>();
+    const addNotification = (userId: string | undefined, nodeId: string, type: PortalNotification["type"], title: string, detail: string) => {
+      if (!userId || userId === user.id || notifiedUsers.has(userId) || !next.users.some((candidate) => candidate.id === userId && candidate.active)) return;
+      next.notifications.unshift({ id: crypto.randomUUID(), userId, actorId: user.id, nodeId, type, title, detail, createdAt: new Date().toISOString(), readAt: "" });
+      notifiedUsers.add(userId);
+    };
+    const relatedUsers = (nodeId: string) => {
+      const node = next.nodes.find((candidate) => candidate.id === nodeId);
+      return node ? [...new Set([node.ownerId, node.assigneeId, node.acceptorId, ...node.participantIds])] : [];
+    };
+    const newMessages = (next.discussions || []).filter((message) => !(current.discussions || []).some((existing) => existing.id === message.id));
+    for (const message of newMessages) {
+      const node = next.nodes.find((candidate) => candidate.id === message.nodeId);
+      const recipients = message.recipientId ? [message.recipientId] : relatedUsers(message.nodeId);
+      const type: PortalNotification["type"] = message.kind === "question" ? "question" : message.kind === "decision" ? "decision" : message.kind === "approval" ? "acceptance" : "comment";
+      const title = message.kind === "question" ? `Нове питання · ${node?.code || "картка"}` : message.kind === "decision" ? `Запит рішення · ${node?.code || "картка"}` : message.kind === "approval" ? `Погодження · ${node?.code || "картка"}` : `Новий коментар · ${node?.code || "картка"}`;
+      for (const recipientId of recipients) addNotification(recipientId, message.nodeId, type, title, message.text);
+    }
+    for (const acceptance of next.acceptances) {
+      const before = current.acceptances.find((item) => item.id === acceptance.id);
+      const node = next.nodes.find((candidate) => candidate.id === acceptance.nodeId);
+      if (!before) addNotification(acceptance.acceptorId, acceptance.nodeId, "acceptance", `Результат очікує приймання · ${node?.code || "картка"}`, node?.title || acceptance.evidenceNote);
+      else if (before.status !== acceptance.status) addNotification(acceptance.submittedBy, acceptance.nodeId, "acceptance", acceptance.status === "accepted" ? `Результат прийнято · ${node?.code || "картка"}` : `Результат повернуто · ${node?.code || "картка"}`, acceptance.feedback);
+    }
+    for (const decision of next.decisions) {
+      const before = current.decisions.find((item) => item.id === decision.id);
+      const node = next.nodes.find((candidate) => candidate.id === decision.nodeId);
+      if (!before) addNotification(decision.decisionOwnerId, decision.nodeId, "decision", `Потрібне рішення · ${node?.code || "картка"}`, decision.question);
+      else if (before.status !== decision.status) {
+        const requester = (current.discussions || []).find((message) => message.relatedType === "decision" && message.relatedId === decision.id)?.authorId;
+        addNotification(requester, decision.nodeId, "decision", `Рішення прийнято · ${node?.code || "картка"}`, decision.resolution);
+      }
+    }
+    for (const id of changedNodeIds) {
+      const before = current.nodes.find((node) => node.id === id);
+      const after = next.nodes.find((node) => node.id === id);
+      if (!after) continue;
+      const recipients = [...new Set([after.ownerId, after.assigneeId, after.acceptorId, ...after.participantIds])];
+      for (const recipientId of recipients) {
+        const delegated = recipientId === after.assigneeId && before?.assigneeId !== after.assigneeId;
+        const type: PortalNotification["type"] = !before ? "created" : delegated ? "delegation" : before.lifecycle !== "completed" && after.lifecycle === "completed" ? "completed" : "updated";
+        const title = !before ? `Створено ${after.code}` : delegated ? `Вам делеговано ${after.code}` : type === "completed" ? `Завершено ${after.code}` : `${after.code}: ${body.action || "оновлено"}`;
+        addNotification(recipientId, after.id, type, title, after.title);
+      }
+    }
+    next.notifications = next.notifications.slice(0, 1000);
+  }
   next.revision = current.revision + 1;
   next.version = Math.max(2, next.version || 2);
   next.audit = [

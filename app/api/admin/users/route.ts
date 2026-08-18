@@ -112,6 +112,23 @@ export async function POST(request: Request) {
     actionLabel = `Створено новий пароль для ${target.name}`;
   }
 
+  const notificationTarget = next.users.find((candidate) => candidate.id === entityId);
+  if (notificationTarget && notificationTarget.id !== actor.id) {
+    next.notifications = Array.isArray(next.notifications) ? next.notifications : [];
+    next.notifications.unshift({
+      id: crypto.randomUUID(),
+      userId: notificationTarget.id,
+      actorId: actor.id,
+      nodeId: "",
+      type: body.action === "create" ? "created" : "updated",
+      title: body.action === "create" ? "Створено ваш доступ до порталу" : "Оновлено ваш обліковий запис",
+      detail: actionLabel,
+      createdAt: now,
+      readAt: "",
+    });
+    next.notifications = next.notifications.slice(0, 1000);
+  }
+
   next.version = Math.max(2, next.version || 2);
   next.revision = current.revision + 1;
   next.audit = [{ id: crypto.randomUUID(), at: now, by: actor.name, action: actionLabel, entityId }, ...next.audit].slice(0, 500);
