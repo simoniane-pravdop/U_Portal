@@ -763,6 +763,11 @@ tbody tr:hover { background: #f8fafc; }
 .coordination-attention-table > button > div:nth-child(2) span { padding: 4px 6px; border-radius: 999px; color: #7c5320; background: var(--amber-soft); font-size: 7px; font-weight: 800; }
 .coordination-attention-table > button > span, .coordination-attention-table > button time { color: var(--muted); font-size: 8px; }
 .coordination-tree-table { margin-bottom: 12px; overflow: hidden; }
+.coordination-tree-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 5px; }
+.coordination-tree-controls > button { min-height: 30px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--navy-700); background: #fff; font-size: 8px; font-weight: 800; }
+.coordination-tree-controls > button.active { color: #fff; border-color: var(--navy-800); background: var(--navy-800); }
+.coordination-tree-controls > button:disabled { cursor: not-allowed; opacity: .45; }
+.coordination-tree-controls > .count { flex: 0 0 auto; }
 .coordination-tree-head, .coordination-tree-row { display: grid; grid-template-columns: minmax(300px, 1.8fr) 140px 95px 60px 95px minmax(190px, 1fr); align-items: center; gap: 7px; }
 .coordination-tree-head { min-width: 900px; padding: 8px 11px; color: var(--muted); background: #f7f9fb; border-bottom: 1px solid var(--line-soft); font-size: 7px; font-weight: 850; text-transform: uppercase; }
 .coordination-tree-body { min-width: 900px; }
