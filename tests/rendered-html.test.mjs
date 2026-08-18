@@ -73,6 +73,9 @@ test("durable storage and integration bindings are declared", async () => {
   const asanaSync = await readFile(new URL("../app/api/asana/sync/route.ts", import.meta.url), "utf8");
   assert.match(asanaSync, /addFollowers/);
   assert.match(asanaSync, /followers\.gid/);
+  const asanaSearch = await readFile(new URL("../app/api/asana/tasks/search/route.ts", import.meta.url), "utf8");
+  assert.match(asanaSearch, /резервний|fallbackParams/);
+  assert.match(asanaSearch, /completed_since/);
   const stateRoute = await readFile(new URL("../app/api/state/route.ts", import.meta.url), "utf8");
   assert.match(stateRoute, /next\.notifications\.unshift/);
   assert.match(stateRoute, /startsWith\("Сповіщення"\)/);
@@ -110,6 +113,8 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /tree-row-menu/);
   assert.match(source, /mobile-tree-switch/);
   assert.match(source, /compact-tree/);
+  assert.match(source, /tree-width-handle/);
+  assert.match(source, /portal:tree-navigation-width/);
   assert.match(source, /return \["cycle", "subcycle"\]/);
   assert.match(source, /Додати завдання/);
   assert.match(source, /Завдання можна включити безпосередньо в управлінський цикл або в його підцикл/);
@@ -137,8 +142,14 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.doesNotMatch(source, /Робочий контур/);
   assert.match(source, /Координація за управлінськими циклами/);
   assert.match(source, /Предмет координації — зведений стан усіх завдань циклу/);
-  assert.match(source, /Зведення за завданнями/);
-  assert.match(source, /Нова координація циклу/);
+  assert.match(source, /Потребує координації/);
+  assert.match(source, /Цикл без завдань/);
+  assert.match(source, /три останні звіти/);
+  assert.match(source, /slice\(0, 3\)/);
+  assert.match(source, /Показати звіти/);
+  assert.match(source, /Календар строків і координацій/);
+  assert.match(source, /Перша координація/);
+  assert.match(source, /Періодичність, днів/);
   assert.match(source, /selected\?\.kind === "cycle"/);
   assert.doesNotMatch(source, /Одиниця координації — підцикл/);
   assert.match(source, /Статус Завдання|parent\.health = state\.blockers/);
@@ -169,6 +180,9 @@ test("compact laptop and mobile layouts are declared", async () => {
   assert.match(css, /@media \(max-width: 760px\)/);
   assert.match(css, /@media \(max-width: 520px\)/);
   assert.match(css, /\.tree-workbench\.compact-tree/);
+  assert.match(css, /--tree-nav-width/);
+  assert.match(css, /\.coordination-tree-table/);
+  assert.match(css, /\.calendar-grid/);
   assert.match(css, /\.tree-workbench\.mobile-pane-tree \.node-detail/);
   assert.match(css, /position: fixed; z-index: 90; top: auto; right: 0; bottom: 0/);
   assert.match(css, /\.coordination-card footer button\.primary/);

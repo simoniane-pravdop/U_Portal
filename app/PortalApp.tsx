@@ -23,7 +23,7 @@ import type {
   WorkNode,
 } from "./types";
 
-type View = "dashboard" | "inbox" | "tree" | "my" | "coordination" | "settings";
+type View = "dashboard" | "inbox" | "calendar" | "tree" | "my" | "coordination" | "settings";
 type Modal = "node" | "blocker" | "decision" | "coordination" | "dependency" | "evidence" | null;
 type NoticeTone = "success" | "error";
 type Notify = (value: string, tone?: NoticeTone) => void;
@@ -67,6 +67,7 @@ const roleLabels: Record<string, string> = {
 const nav: Array<{ id: View; label: string; hint: string; icon: string }> = [
   { id: "dashboard", label: "Дашборд", hint: "Результати й відхилення", icon: "▦" },
   { id: "inbox", label: "Вхідні", hint: "Сповіщення та звернення", icon: "●" },
+  { id: "calendar", label: "Календар", hint: "Строки й координації", icon: "▤" },
   { id: "tree", label: "Дерево цілей", hint: "Цикли та завдання", icon: "⌘" },
   { id: "my", label: "Моя робота", hint: "Виконання й звіти", icon: "☑" },
   { id: "coordination", label: "Координація", hint: "Зведення за циклами", icon: "↔" },
@@ -85,6 +86,36 @@ function dateLabel(value: string) {
 function daysUntil(value: string) {
   if (!value) return null;
   return Math.ceil((new Date(`${value}T23:59:59`).getTime() - Date.now()) / 86_400_000);
+}
+
+function coordinationAttentionReasons(payload: PortalPayload, node: WorkNode) {
+  const reasons = new Set<string>();
+  const today = new Date().toISOString().slice(0, 10);
+  if (payload.blockers.some((item) => item.nodeId === node.id && item.status === "open")) reasons.add("Відкритий блокер");
+  else if (node.health === "blocked") reasons.add("Заблоковано");
+  if (node.health === "risk") reasons.add("Є ризик");
+  if ((payload.discussions || []).some((message) => message.nodeId === node.id && !message.resolvedAt && message.kind === "question")) reasons.add("Питання без відповіді");
+  if ((payload.discussions || []).some((message) => message.nodeId === node.id && !message.resolvedAt && message.kind === "comment" && message.requiresResponse)) reasons.add("Коментар без відповіді");
+  if (payload.decisions.some((item) => item.nodeId === node.id && item.status === "requested")) reasons.add("Рішення не прийнято");
+  if (payload.acceptances.some((item) => item.nodeId === node.id && item.status === "submitted") || node.lifecycle === "acceptance") reasons.add("Результат не прийнято");
+  if (node.kind === "task" && node.lifecycle === "completed" && !payload.acceptances.some((item) => item.nodeId === node.id && item.status === "accepted")) reasons.add("Завершено без приймання");
+  if (node.plannedEnd && node.plannedEnd < today && !["completed", "cancelled"].includes(node.lifecycle)) reasons.add("Прострочений строк");
+  if (node.kind === "cycle" && !descendants(payload.nodes.filter((item) => !item.archived), node.id).some((item) => item.kind === "task")) reasons.add("Цикл без завдань");
+  return [...reasons];
+}
+
+const weekdayLabels = ["Неділя", "Понеділок", "Вівторок", "Середа", "Четвер", "П’ятниця", "Субота"];
+
+function coordinationCadenceLabel(node: WorkNode) {
+  if (node.coordinationStartDate && node.coordinationIntervalDays) return `${weekdayLabels[node.coordinationWeekday ?? new Date(`${node.coordinationStartDate}T12:00:00`).getDay()]} · кожні ${node.coordinationIntervalDays} дн. · з ${dateLabel(node.coordinationStartDate)}`;
+  return node.coordinationCadence || "Графік не визначено";
+}
+
+function alignDateToWeekday(value: string, weekday: number) {
+  if (!value) return "";
+  const date = new Date(`${value}T12:00:00`);
+  date.setDate(date.getDate() + (weekday - date.getDay() + 7) % 7);
+  return date.toISOString().slice(0, 10);
 }
 
 function stateOnly(payload: PortalPayload): PortalState {
@@ -240,7 +271,10 @@ function blankNode(nodes: WorkNode[], parent: WorkNode | undefined, user: Portal
     startMode: parent ? "with_parent" : "fixed_date",
     resource: "",
     authority: "",
-    coordinationCadence: kind === "subcycle" ? "Щотижня" : "",
+    coordinationCadence: kind === "cycle" ? "Щотижня" : "",
+    coordinationStartDate: "",
+    coordinationIntervalDays: 7,
+    coordinationWeekday: 1,
     controlPlace: "",
     visibility: "company",
     archived: false,
@@ -816,6 +850,7 @@ export function PortalApp() {
         <div className="content">
           {view === "dashboard" && <DashboardView data={data} payload={payload} userById={userById} healthFilter={healthFilter} setHealthFilter={setHealthFilter} mutate={mutate} select={(id) => { setSelectedId(id); setView("tree"); }} />}
           {view === "inbox" && <NotificationsView payload={payload} userById={userById} mutate={mutate} openNode={(id) => { setSelectedId(id); setView("my"); }} />}
+          {view === "calendar" && <CalendarView payload={payload} userById={userById} openNode={(id) => { setSelectedId(id); setView("my"); }} />}
           {view === "tree" && (
             <TreeView
               payload={payload} selected={selected} selectedId={selectedId} setSelectedId={setSelectedId}
@@ -899,6 +934,53 @@ function DashboardView({ data, payload, userById, healthFilter, setHealthFilter,
   </>;
 }
 
+type CalendarEvent = { id: string; date: string; nodeId: string; ownerId: string; type: "start" | "deadline" | "forecast" | "coordination" | "blocker" | "decision"; title: string; code: string };
+
+function CalendarView({ payload, userById, openNode }: { payload: PortalPayload; userById: (id: string) => PortalUser | undefined; openNode: (id: string) => void }) {
+  const today = new Date();
+  const [month, setMonth] = useState(() => `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`);
+  const [ownerId, setOwnerId] = useState("all");
+  const [type, setType] = useState<"all" | CalendarEvent["type"]>("all");
+  const [year, monthNumber] = month.split("-").map(Number);
+  const monthStart = `${month}-01`;
+  const monthEnd = `${month}-${String(new Date(year, monthNumber, 0).getDate()).padStart(2, "0")}`;
+  const events: CalendarEvent[] = [];
+  const add = (event: CalendarEvent) => { if (event.date >= monthStart && event.date <= monthEnd) events.push(event); };
+  for (const node of payload.nodes.filter((item) => !item.archived)) {
+    if (node.plannedStart) add({ id: `${node.id}-start`, date: node.plannedStart, nodeId: node.id, ownerId: node.assigneeId, type: "start", title: `Початок: ${node.title}`, code: node.code });
+    if (node.plannedEnd) add({ id: `${node.id}-deadline`, date: node.plannedEnd, nodeId: node.id, ownerId: node.assigneeId, type: "deadline", title: `Строк: ${node.title}`, code: node.code });
+    if (node.forecastEnd && node.forecastEnd !== node.plannedEnd) add({ id: `${node.id}-forecast`, date: node.forecastEnd, nodeId: node.id, ownerId: node.assigneeId, type: "forecast", title: `Прогноз: ${node.title}`, code: node.code });
+    if (node.kind === "cycle" && node.coordinationStartDate && (node.coordinationIntervalDays || 0) > 0) {
+      const interval = node.coordinationIntervalDays || 7;
+      const occurrence = new Date(`${node.coordinationStartDate}T12:00:00`);
+      const end = new Date(`${monthEnd}T12:00:00`);
+      while (occurrence.toISOString().slice(0, 10) < monthStart) occurrence.setDate(occurrence.getDate() + interval);
+      while (occurrence <= end) {
+        const date = occurrence.toISOString().slice(0, 10);
+        add({ id: `${node.id}-coordination-${date}`, date, nodeId: node.id, ownerId: node.assigneeId, type: "coordination", title: `Координація: ${node.title}`, code: node.code });
+        occurrence.setDate(occurrence.getDate() + interval);
+      }
+    }
+  }
+  for (const blocker of payload.blockers.filter((item) => item.status === "open" && item.decisionDue)) {
+    const node = payload.nodes.find((item) => item.id === blocker.nodeId); if (node) add({ id: `${blocker.id}-due`, date: blocker.decisionDue, nodeId: node.id, ownerId: blocker.ownerId, type: "blocker", title: `Реакція на блокер: ${blocker.title}`, code: node.code });
+  }
+  for (const decision of payload.decisions.filter((item) => item.status === "requested" && item.dueDate)) {
+    const node = payload.nodes.find((item) => item.id === decision.nodeId); if (node) add({ id: `${decision.id}-due`, date: decision.dueDate, nodeId: node.id, ownerId: decision.decisionOwnerId, type: "decision", title: `Рішення: ${decision.question}`, code: node.code });
+  }
+  const visible = events.filter((event) => (ownerId === "all" || event.ownerId === ownerId) && (type === "all" || event.type === type)).sort((a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title, "uk"));
+  const firstDay = new Date(year, monthNumber - 1, 1, 12);
+  const leading = (firstDay.getDay() + 6) % 7;
+  const daysInMonth = new Date(year, monthNumber, 0).getDate();
+  const cells = Array.from({ length: Math.ceil((leading + daysInMonth) / 7) * 7 }, (_, index) => index - leading + 1);
+  const changeMonth = (delta: number) => { const next = new Date(year, monthNumber - 1 + delta, 1, 12); setMonth(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}`); };
+  const eventLabel = (eventType: CalendarEvent["type"]) => eventType === "start" ? "Початок" : eventType === "deadline" ? "Строк" : eventType === "forecast" ? "Прогноз" : eventType === "coordination" ? "Координація" : eventType === "blocker" ? "Блокер" : "Рішення";
+  return <><PageIntro kicker="Часовий контур" title="Календар строків і координацій" text="Планові дати, прогнози, управлінські рішення, реакція на блокери та повторювані координації циклів в одному місці." actions={<div className="calendar-period"><button onClick={() => changeMonth(-1)}>‹</button><button onClick={() => setMonth(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`)}>Сьогодні</button><strong>{new Intl.DateTimeFormat("uk-UA", { month: "long", year: "numeric" }).format(firstDay)}</strong><button onClick={() => changeMonth(1)}>›</button></div>} />
+    <section className="panel calendar-panel"><div className="calendar-filters"><select value={ownerId} onChange={(event) => setOwnerId(event.target.value)}><option value="all">Усі відповідальні</option>{payload.users.filter((user) => user.active).map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select><select value={type} onChange={(event) => setType(event.target.value as typeof type)}><option value="all">Усі події</option><option value="coordination">Координації</option><option value="deadline">Планові строки</option><option value="forecast">Прогнози</option><option value="start">Початки</option><option value="blocker">Блокери</option><option value="decision">Рішення</option></select><span>{visible.length} подій</span></div><div className="calendar-grid"><div className="calendar-weekdays">{["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"].map((day) => <span key={day}>{day}</span>)}</div><div className="calendar-days">{cells.map((day, index) => { const date = day > 0 && day <= daysInMonth ? `${month}-${String(day).padStart(2, "0")}` : ""; const dayEvents = date ? visible.filter((event) => event.date === date) : []; return <div key={`${day}-${index}`} className={`${date ? "" : "outside"} ${date === today.toISOString().slice(0, 10) ? "today" : ""}`}><time>{date ? day : ""}</time>{dayEvents.slice(0, 4).map((event) => <button key={event.id} className={event.type} onClick={() => openNode(event.nodeId)} title={`${eventLabel(event.type)} · ${event.title}`}><span>{event.code}</span>{event.title}</button>)}{dayEvents.length > 4 && <small>+{dayEvents.length - 4} подій</small>}</div>; })}</div></div></section>
+    <section className="panel calendar-agenda"><div className="panel-head"><div><span>Перелік місяця</span><h2>Усі строки за датою</h2></div><b className="count">{visible.length}</b></div><div>{visible.map((event) => <button key={event.id} onClick={() => openNode(event.nodeId)}><time>{dateLabel(event.date)}</time><span className={event.type}>{eventLabel(event.type)}</span><strong>{event.code} · {event.title}</strong><small>{userById(event.ownerId)?.name || "Не визначено"}</small></button>)}{!visible.length && <p className="empty-state padded">У цьому місяці подій за вибраними фільтрами немає.</p>}</div></section>
+  </>;
+}
+
 function TreeView(props: {
   payload: PortalPayload; selected?: WorkNode; selectedId: string; setSelectedId: (id: string) => void; search: string; setSearch: (value: string) => void;
   userById: (id: string) => PortalUser | undefined; canManage: boolean; locks: EditingLock[]; openCreateKind: (kind: NodeKind, context?: WorkNode) => void; openEdit: (node: WorkNode) => Promise<void>;
@@ -908,6 +990,11 @@ function TreeView(props: {
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(payload.nodes.filter((node) => node.kind !== "task").map((node) => node.id)));
   const [detailTab, setDetailTab] = useState<"passport" | "structure" | "history">("passport");
   const [treeCompact, setTreeCompact] = useState(false);
+  const [treeWidth, setTreeWidth] = useState(() => {
+    if (typeof window === "undefined") return 300;
+    const saved = Number(window.localStorage.getItem("portal:tree-navigation-width"));
+    return Number.isFinite(saved) && saved >= 220 && saved <= 560 ? saved : 300;
+  });
   const [mobilePane, setMobilePane] = useState<"tree" | "card">("tree");
   const [kindFilter, setKindFilter] = useState<"all" | NodeKind>("all");
   const [ownerFilter, setOwnerFilter] = useState("all");
@@ -934,6 +1021,28 @@ function TreeView(props: {
   const children = selected ? payload.nodes.filter((node) => node.parentId === selected.id && !node.archived) : [];
   const canEditSelected = Boolean(selected && (canManage || selected.ownerId === payload.currentUser.id));
   const completionReason = selected ? completionBlockReason(payload.nodes, selected) : "";
+  const startTreeResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (treeCompact || window.innerWidth <= 900) return;
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = treeWidth;
+    let latestWidth = treeWidth;
+    const move = (pointerEvent: PointerEvent) => {
+      latestWidth = Math.max(220, Math.min(Math.min(560, window.innerWidth * .52), startWidth + pointerEvent.clientX - startX));
+      setTreeWidth(Math.round(latestWidth));
+    };
+    const stop = () => {
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      window.localStorage.setItem("portal:tree-navigation-width", String(Math.round(latestWidth)));
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+    };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop, { once: true });
+  };
 
   const archiveBranch = async (node: WorkNode) => {
     if (!window.confirm(`Видалити ${node.code} з робочого дерева? Запис залишиться в журналі та архіві.`)) return;
@@ -961,11 +1070,12 @@ function TreeView(props: {
   return <>
     <PageIntro kicker="Структура управління" title="Дерево цілей, циклів і завдань" text="Тут створюється структура та зберігаються паспорти. Виконання й звіти ведуться у «Моїй роботі»." actions={canManage && <details className="create-uo-menu"><summary>+ Створити</summary><div>{(["goal", "cycle", "subcycle", "task"] as NodeKind[]).map((kind) => <button key={kind} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); openCreateKind(kind, selected); }}><span>{kind === "goal" ? "S" : kind === "cycle" ? "P" : kind === "subcycle" ? "P.x" : "✓"}</span>{kindLabels[kind]}</button>)}</div></details>} />
     <div className="mobile-tree-switch" role="tablist"><button className={mobilePane === "tree" ? "active" : ""} onClick={() => setMobilePane("tree")}>Дерево</button><button disabled={!selected} className={mobilePane === "card" ? "active" : ""} onClick={() => setMobilePane("card")}>{selected ? `Картка ${selected.code}` : "Картка"}</button></div>
-    <div className={`tree-workbench ${treeCompact ? "compact-tree" : ""} mobile-pane-${mobilePane}`}>
+    <div className={`tree-workbench ${treeCompact ? "compact-tree" : ""} mobile-pane-${mobilePane}`} style={{ "--tree-nav-width": `${treeWidth}px` } as React.CSSProperties}>
       <aside className="tree-catalog">
         <div className="catalog-head">{!treeCompact && <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Пошук у дереві…" />}<span>{filtered.length}</span><button className="tree-compact-toggle" onClick={() => setTreeCompact((value) => !value)} title={treeCompact ? "Розгорнути дерево" : "Згорнути дерево до кодів"} aria-label={treeCompact ? "Розгорнути дерево" : "Згорнути дерево до кодів"}>{treeCompact ? "→" : "К"}</button></div>
         {!treeCompact && <div className="compact-filters"><select value={kindFilter} onChange={(event) => setKindFilter(event.target.value as "all" | NodeKind)}><option value="all">Усі рівні</option><option value="goal">Цілі</option><option value="cycle">Цикли</option><option value="subcycle">Підцикли</option><option value="task">Завдання</option></select><select value={ownerFilter} onChange={(event) => setOwnerFilter(event.target.value)}><option value="all">Усі відповідальні</option>{payload.users.filter((user) => user.active).map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select><select value={stateFilter} onChange={(event) => setStateFilter(event.target.value as typeof stateFilter)}><option value="all">Усі стани</option><option value="active">Активні</option><option value="risk">Ризик / блокер</option><option value="completed">Завершені</option></select></div>}
         <div className="tree-scroll">{renderBranch(null)}{!filtered.length && <p className="empty-state padded">Дерево порожнє. Створіть першу стратегічну ціль.</p>}</div>
+        {!treeCompact && <button type="button" className="tree-width-handle" aria-label={`Змінити ширину навігації дерева, зараз ${treeWidth} пікселів`} title="Перетягніть для зміни ширини · стрілки — крок 20 пікселів · подвійне натискання — стандартна ширина" onPointerDown={startTreeResize} onKeyDown={(event) => { if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return; event.preventDefault(); const next = Math.max(220, Math.min(560, treeWidth + (event.key === "ArrowRight" ? 20 : -20))); setTreeWidth(next); window.localStorage.setItem("portal:tree-navigation-width", String(next)); }} onDoubleClick={() => { setTreeWidth(300); window.localStorage.setItem("portal:tree-navigation-width", "300"); }} />}
       </aside>
       {selected ? <section className="node-detail">
         <header className="node-detail-head">
@@ -988,13 +1098,13 @@ function NotificationsView({ payload, userById, mutate, openNode }: { payload: P
   const visible = mine.filter((item) => filter === "all" || (filter === "unread" ? !item.readAt : item.type === filter));
   const pendingApprovals = payload.acceptances.filter((item) => item.status === "submitted" && item.acceptorId === payload.currentUser.id);
   const pendingDecisions = payload.decisions.filter((item) => item.status === "requested" && item.decisionOwnerId === payload.currentUser.id);
-  const pendingQuestions = (payload.discussions || []).filter((item) => item.kind === "question" && !item.resolvedAt && item.recipientId === payload.currentUser.id);
+  const pendingQuestions = (payload.discussions || []).filter((item) => (item.kind === "question" || item.requiresResponse) && !item.resolvedAt && item.recipientId === payload.currentUser.id);
   const markRead = (notification: PortalNotification) => notification.readAt ? Promise.resolve(true) : mutate("Сповіщення прочитано", notification.id, (state) => { const item = state.notifications.find((candidate) => candidate.id === notification.id); if (item) item.readAt = isoNow(); });
   const markAllRead = () => mutate("Сповіщення прочитано всі", payload.currentUser.id, (state) => { for (const item of state.notifications) if (item.userId === payload.currentUser.id && !item.readAt) item.readAt = isoNow(); });
   const open = async (notification: PortalNotification) => { await markRead(notification); if (notification.nodeId && payload.nodes.some((node) => node.id === notification.nodeId && !node.archived)) openNode(notification.nodeId); };
   const typeLabel = (type: PortalNotification["type"]) => type === "delegation" ? "Делегування" : type === "question" ? "Питання" : type === "decision" ? "Рішення" : type === "acceptance" ? "Погодження" : type === "comment" ? "Коментар" : type === "created" ? "Створення" : type === "completed" ? "Завершення" : "Оновлення";
   return <><PageIntro kicker="Персональний центр" title="Вхідні та сповіщення" text="Усі дії, адресовані вам, і зміни в картках, за які ви відповідаєте або в яких берете участь." actions={<button className="secondary" disabled={!mine.some((item) => !item.readAt)} onClick={() => void markAllRead()}>Позначити все прочитаним</button>} />
-    <section className="panel inbox-actions"><div className="panel-head"><div><span>Потребують дії</span><h2>Питання, рішення та приймання</h2></div><b className="count amber">{pendingApprovals.length + pendingDecisions.length + pendingQuestions.length}</b></div><div>{pendingApprovals.map((item) => { const node = payload.nodes.find((candidate) => candidate.id === item.nodeId); return <button key={item.id} onClick={() => openNode(item.nodeId)}><span>Приймання · {node?.code}</span><strong>{node?.title}</strong><small>Передано {new Date(item.submittedAt).toLocaleString("uk-UA")}</small></button>; })}{pendingDecisions.map((item) => { const node = payload.nodes.find((candidate) => candidate.id === item.nodeId); return <button key={item.id} onClick={() => openNode(item.nodeId)}><span>Рішення · {node?.code}</span><strong>{item.question}</strong><small>До {dateLabel(item.dueDate)}</small></button>; })}{pendingQuestions.map((item) => { const node = payload.nodes.find((candidate) => candidate.id === item.nodeId); return <button key={item.id} onClick={() => openNode(item.nodeId)}><span>Питання · {node?.code}</span><strong>{item.text}</strong><small>{userById(item.authorId)?.name || "Учасник"}</small></button>; })}{!pendingApprovals.length && !pendingDecisions.length && !pendingQuestions.length && <p className="empty-state padded">Звернень, які потребують вашої дії, немає.</p>}</div></section>
+    <section className="panel inbox-actions"><div className="panel-head"><div><span>Потребують дії</span><h2>Питання, рішення та приймання</h2></div><b className="count amber">{pendingApprovals.length + pendingDecisions.length + pendingQuestions.length}</b></div><div>{pendingApprovals.map((item) => { const node = payload.nodes.find((candidate) => candidate.id === item.nodeId); return <button key={item.id} onClick={() => openNode(item.nodeId)}><span>Приймання · {node?.code}</span><strong>{node?.title}</strong><small>Передано {new Date(item.submittedAt).toLocaleString("uk-UA")}</small></button>; })}{pendingDecisions.map((item) => { const node = payload.nodes.find((candidate) => candidate.id === item.nodeId); return <button key={item.id} onClick={() => openNode(item.nodeId)}><span>Рішення · {node?.code}</span><strong>{item.question}</strong><small>До {dateLabel(item.dueDate)}</small></button>; })}{pendingQuestions.map((item) => { const node = payload.nodes.find((candidate) => candidate.id === item.nodeId); return <button key={item.id} onClick={() => openNode(item.nodeId)}><span>{item.kind === "question" ? "Питання" : "Коментар"} · {node?.code}</span><strong>{item.text}</strong><small>{userById(item.authorId)?.name || "Учасник"}</small></button>; })}{!pendingApprovals.length && !pendingDecisions.length && !pendingQuestions.length && <p className="empty-state padded">Звернень, які потребують вашої дії, немає.</p>}</div></section>
     <section className="panel notification-center"><div className="notification-toolbar"><div>{(["unread", "all", "delegation", "question", "decision", "acceptance", "comment", "updated"] as const).map((item) => <button key={item} className={filter === item ? "active" : ""} onClick={() => setFilter(item)}>{item === "unread" ? "Непрочитані" : item === "all" ? "Усі" : typeLabel(item)}</button>)}</div><span>{visible.length} записів</span></div><div className="notification-list">{visible.map((item) => <article key={item.id} className={item.readAt ? "read" : "unread"}><button onClick={() => void open(item)}><i aria-hidden="true" /><div><span>{typeLabel(item.type)}{item.nodeId && payload.nodes.find((node) => node.id === item.nodeId)?.code ? ` · ${payload.nodes.find((node) => node.id === item.nodeId)?.code}` : ""}</span><strong>{item.title}</strong><p>{item.detail}</p><small>{userById(item.actorId)?.name || "Система"} · {new Date(item.createdAt).toLocaleString("uk-UA")}</small></div></button>{!item.readAt && <button className="mark-read" onClick={() => void markRead(item)}>Прочитано</button>}</article>)}{!visible.length && <p className="empty-state padded">За вибраним фільтром сповіщень немає.</p>}</div></section>
   </>;
 }
@@ -1009,7 +1119,7 @@ function MyWork({ payload, selected, selectedId, setSelectedId, userById, canMan
   const [priorityFilter, setPriorityFilter] = useState<"all" | WorkNode["priority"]>("all");
   const pendingApprovals = payload.acceptances.filter((item) => item.status === "submitted" && item.acceptorId === payload.currentUser.id);
   const pendingDecisions = payload.decisions.filter((item) => item.status === "requested" && item.decisionOwnerId === payload.currentUser.id);
-  const pendingQuestions = (payload.discussions || []).filter((item) => item.kind === "question" && !item.resolvedAt && item.recipientId === payload.currentUser.id);
+  const pendingQuestions = (payload.discussions || []).filter((item) => (item.kind === "question" || item.requiresResponse) && !item.resolvedAt && item.recipientId === payload.currentUser.id);
   const incomingNodeIds = new Set([...pendingApprovals.map((item) => item.nodeId), ...pendingDecisions.map((item) => item.nodeId), ...pendingQuestions.map((item) => item.nodeId)]);
   const mine = payload.nodes.filter((node) => !node.archived && (node.ownerId === payload.currentUser.id || node.assigneeId === payload.currentUser.id || node.acceptorId === payload.currentUser.id || node.participantIds.includes(payload.currentUser.id) || incomingNodeIds.has(node.id)));
   const priorityOrder = { critical: 0, high: 1, normal: 2, low: 3 };
@@ -1042,7 +1152,7 @@ function MyWork({ payload, selected, selectedId, setSelectedId, userById, canMan
   });
 
   return <>
-    {incomingNodeIds.size > 0 && <section className="approval-queue panel"><div className="panel-head"><div><span>Вхідні</span><h2>Погодження, рішення та питання</h2></div><b className="count amber">{pendingApprovals.length + pendingDecisions.length + pendingQuestions.length}</b></div><div>{pendingApprovals.map((acceptance) => { const node = payload.nodes.find((item) => item.id === acceptance.nodeId); return node ? <button key={acceptance.id} onClick={() => { setSelectedId(node.id); setFilter("inbox"); }}><span>Приймання · {node.code}</span><strong>{node.title}</strong><small>Передано {new Date(acceptance.submittedAt).toLocaleString("uk-UA")}</small></button> : null; })}{pendingDecisions.map((decision) => { const node = payload.nodes.find((item) => item.id === decision.nodeId); return node ? <button key={decision.id} onClick={() => { setSelectedId(node.id); setFilter("inbox"); }}><span>Рішення · {node.code}</span><strong>{decision.question}</strong><small>До {dateLabel(decision.dueDate)}</small></button> : null; })}{pendingQuestions.map((message) => { const node = payload.nodes.find((item) => item.id === message.nodeId); return node ? <button key={message.id} onClick={() => { setSelectedId(node.id); setFilter("inbox"); }}><span>Питання · {node.code}</span><strong>{message.text}</strong><small>Від {userById(message.authorId)?.name || "учасника"}</small></button> : null; })}</div></section>}
+    {incomingNodeIds.size > 0 && <section className="approval-queue panel"><div className="panel-head"><div><span>Вхідні</span><h2>Погодження, рішення та питання</h2></div><b className="count amber">{pendingApprovals.length + pendingDecisions.length + pendingQuestions.length}</b></div><div>{pendingApprovals.map((acceptance) => { const node = payload.nodes.find((item) => item.id === acceptance.nodeId); return node ? <button key={acceptance.id} onClick={() => { setSelectedId(node.id); setFilter("inbox"); }}><span>Приймання · {node.code}</span><strong>{node.title}</strong><small>Передано {new Date(acceptance.submittedAt).toLocaleString("uk-UA")}</small></button> : null; })}{pendingDecisions.map((decision) => { const node = payload.nodes.find((item) => item.id === decision.nodeId); return node ? <button key={decision.id} onClick={() => { setSelectedId(node.id); setFilter("inbox"); }}><span>Рішення · {node.code}</span><strong>{decision.question}</strong><small>До {dateLabel(decision.dueDate)}</small></button> : null; })}{pendingQuestions.map((message) => { const node = payload.nodes.find((item) => item.id === message.nodeId); return node ? <button key={message.id} onClick={() => { setSelectedId(node.id); setFilter("inbox"); }}><span>{message.kind === "question" ? "Питання" : "Коментар"} · {node.code}</span><strong>{message.text}</strong><small>Від {userById(message.authorId)?.name || "учасника"}</small></button> : null; })}</div></section>}
     <div className="my-workbench">
       <aside className="work-inbox">
         <label className="work-object-picker compact">
@@ -1117,7 +1227,7 @@ function DecisionActionCard({ decision, owner, canDecide, resolve }: { decision:
 }
 
 function DiscussionPanel({ node, payload, mutate, notify, userById }: { node: WorkNode; payload: PortalPayload; mutate: (action: string, entityId: string, recipe: (state: PortalState) => void) => Promise<boolean>; notify: Notify; userById: (id: string) => PortalUser | undefined }) {
-  const [draft, setDraft, clearDraft] = usePersistentDraft(`portal:discussion-draft:${node.id}`, { text: "", kind: "comment" as "comment" | "question", recipientId: node.ownerId });
+  const [draft, setDraft, clearDraft] = usePersistentDraft(`portal:discussion-draft:${node.id}`, { text: "", kind: "comment" as "comment" | "question", recipientId: node.ownerId, requiresResponse: false });
   const [busy, setBusy] = useState(false);
   const [replyToId, setReplyToId] = useState("");
   const messages = (payload.discussions || []).filter((message) => message.nodeId === node.id).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
@@ -1125,26 +1235,36 @@ function DiscussionPanel({ node, payload, mutate, notify, userById }: { node: Wo
   const effectiveRecipientId = draft.recipientId || node.ownerId;
   const send = async () => {
     if (!draft.text.trim()) { notify("Напишіть повідомлення для учасників картки.", "error"); return; }
-    if (draft.kind === "question" && !effectiveRecipientId) { notify("Оберіть адресата питання.", "error"); return; }
+    if ((draft.kind === "question" || draft.requiresResponse) && !effectiveRecipientId) { notify("Оберіть адресата повідомлення.", "error"); return; }
     setBusy(true);
-    const message: DiscussionMessage = { id: crypto.randomUUID(), nodeId: node.id, authorId: payload.currentUser.id, recipientId: replyTo?.authorId || (draft.kind === "question" ? effectiveRecipientId : undefined), replyToId: replyTo?.id, text: draft.text.trim(), kind: draft.kind, createdAt: isoNow() };
+    const message: DiscussionMessage = { id: crypto.randomUUID(), nodeId: node.id, authorId: payload.currentUser.id, recipientId: replyTo?.authorId || (draft.kind === "question" || draft.requiresResponse ? effectiveRecipientId : undefined), replyToId: replyTo?.id, requiresResponse: !replyTo && (draft.kind === "question" || draft.requiresResponse), text: draft.text.trim(), kind: draft.kind, createdAt: isoNow() };
     const ok = await mutate(`${replyTo ? "Додано відповідь" : draft.kind === "question" ? "Поставлено питання" : "Додано коментар"} до ${node.code}`, node.id, (state) => {
       state.discussions.push(message);
       if (replyTo) { const original = state.discussions.find((item) => item.id === replyTo.id); if (original) { original.resolvedAt = isoNow(); original.resolvedBy = payload.currentUser.id; } }
     });
-    if (ok) { setDraft({ text: "", kind: "comment", recipientId: node.ownerId }); setReplyToId(""); clearDraft(); }
+    if (ok) { setDraft({ text: "", kind: "comment", recipientId: node.ownerId, requiresResponse: false }); setReplyToId(""); clearDraft(); }
     setBusy(false);
   };
   const resolveQuestion = (message: DiscussionMessage) => mutate(`Закрито питання в ${node.code}`, node.id, (state) => { const target = state.discussions.find((item) => item.id === message.id); if (target) { target.resolvedAt = isoNow(); target.resolvedBy = payload.currentUser.id; } });
-  return <section className="work-section discussion-panel"><div className="work-section-head"><div><span>Внутрішня комунікація</span><h3>Питання, рішення, погодження та коментарі</h3></div><b>{messages.length}</b></div><div className="discussion-list">{messages.slice(-30).map((message) => <article key={message.id} className={`${message.kind} ${message.resolvedAt ? "resolved" : ""}`}><div><UserAvatar compact user={userById(message.authorId)} /><strong>{userById(message.authorId)?.name || "Система"}</strong>{message.recipientId && <span className="message-recipient">→ {userById(message.recipientId)?.name || "адресат"}</span>}{message.kind === "question" && <span className="question-state">{message.resolvedAt ? "Відповідь отримано" : "Відкрите питання"}</span>}{message.kind === "decision" && <span className="question-state">{message.resolvedAt ? "Рішення прийнято" : "Очікує рішення"}</span>}<time>{new Date(message.createdAt).toLocaleString("uk-UA")}</time></div>{message.replyToId && <small className="reply-reference">Відповідь на попереднє повідомлення</small>}<p>{message.text}</p>{message.kind === "question" && !message.resolvedAt && <div className="question-actions"><button onClick={() => { setReplyToId(message.id); setDraft({ ...draft, kind: "comment", recipientId: message.authorId }); }}>Відповісти</button><button className="resolve-question" onClick={() => void resolveQuestion(message)}>Закрити без відповіді</button></div>}</article>)}{!messages.length && <p className="empty-state">Повідомлень ще немає. Уся комунікація зберігатиметься в картці та у «Вхідних» адресатів.</p>}</div>{replyTo && <div className="reply-banner"><span>Відповідь для {userById(replyTo.authorId)?.name}</span><strong>{replyTo.text}</strong><button onClick={() => setReplyToId("")}>×</button></div>}<div className="discussion-compose expanded"><select value={draft.kind} onChange={(event) => setDraft({ ...draft, kind: event.target.value as "comment" | "question" })}><option value="comment">Коментар</option><option value="question">Питання</option></select>{draft.kind === "question" && !replyTo && <select value={effectiveRecipientId} onChange={(event) => setDraft({ ...draft, recipientId: event.target.value })} aria-label="Адресат питання">{payload.users.filter((user) => user.active).map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select>}<textarea value={draft.text} onChange={(event) => setDraft({ ...draft, text: event.target.value })} placeholder={replyTo ? "Напишіть відповідь…" : "Напишіть питання або коментар…"} /><button className="primary" disabled={busy || !draft.text.trim()} onClick={() => void send()}>{busy ? "Надсилаємо…" : replyTo ? "Відповісти" : "Надіслати"}</button></div></section>;
+  return <section className="work-section discussion-panel">
+    <div className="work-section-head"><div><span>Внутрішня комунікація</span><h3>Питання, рішення, погодження та коментарі</h3></div><b>{messages.length}</b></div>
+    <div className="discussion-list">{messages.slice(-30).map((message) => {
+      const awaitingResponse = !message.resolvedAt && (message.kind === "question" || message.requiresResponse);
+      return <article key={message.id} className={`${message.kind} ${message.resolvedAt ? "resolved" : ""}`}><div><UserAvatar compact user={userById(message.authorId)} /><strong>{userById(message.authorId)?.name || "Система"}</strong>{message.recipientId && <span className="message-recipient">→ {userById(message.recipientId)?.name || "адресат"}</span>}{message.kind === "question" && <span className="question-state">{message.resolvedAt ? "Відповідь отримано" : "Відкрите питання"}</span>}{message.kind === "comment" && message.requiresResponse && <span className="question-state">{message.resolvedAt ? "Відповідь отримано" : "Очікує відповіді"}</span>}{message.kind === "decision" && <span className="question-state">{message.resolvedAt ? "Рішення прийнято" : "Очікує рішення"}</span>}<time>{new Date(message.createdAt).toLocaleString("uk-UA")}</time></div>{message.replyToId && <small className="reply-reference">Відповідь на попереднє повідомлення</small>}<p>{message.text}</p>{awaitingResponse && <div className="question-actions"><button onClick={() => { setReplyToId(message.id); setDraft({ ...draft, kind: "comment", recipientId: message.authorId, requiresResponse: false }); }}>Відповісти</button><button className="resolve-question" onClick={() => void resolveQuestion(message)}>Закрити без відповіді</button></div>}</article>;
+    })}{!messages.length && <p className="empty-state">Повідомлень ще немає. Уся комунікація зберігатиметься в картці та у «Вхідних» адресатів.</p>}</div>
+    {replyTo && <div className="reply-banner"><span>Відповідь для {userById(replyTo.authorId)?.name}</span><strong>{replyTo.text}</strong><button onClick={() => setReplyToId("")}>×</button></div>}
+    <div className="discussion-compose expanded"><select value={draft.kind} onChange={(event) => setDraft({ ...draft, kind: event.target.value as "comment" | "question", requiresResponse: event.target.value === "question" })}><option value="comment">Коментар</option><option value="question">Питання</option></select>{(draft.kind === "question" || draft.requiresResponse) && !replyTo && <select value={effectiveRecipientId} onChange={(event) => setDraft({ ...draft, recipientId: event.target.value })} aria-label="Адресат повідомлення">{payload.users.filter((user) => user.active).map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select>}{draft.kind === "comment" && !replyTo && <label className="comment-response-toggle"><input type="checkbox" checked={Boolean(draft.requiresResponse)} onChange={(event) => setDraft({ ...draft, requiresResponse: event.target.checked })} /><span>Очікую відповідь</span></label>}<textarea value={draft.text} onChange={(event) => setDraft({ ...draft, text: event.target.value })} placeholder={replyTo ? "Напишіть відповідь…" : "Напишіть питання або коментар…"} /><button className="primary" disabled={busy || !draft.text.trim()} onClick={() => void send()}>{busy ? "Надсилаємо…" : replyTo ? "Відповісти" : "Надіслати"}</button></div>
+  </section>;
 }
 
 function CoordinationView({ payload, userById, select, open }: { payload: PortalPayload; userById: (id: string) => PortalUser | undefined; select: (id: string) => void; open: (node: WorkNode) => void }) {
   const [query, setQuery] = useState("");
   const [ownerId, setOwnerId] = useState("all");
   const [state, setState] = useState<"all" | "risk" | "active" | "completed">("all");
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(() => new Set(payload.nodes.filter((node) => node.kind === "goal" || node.kind === "cycle").map((node) => node.id)));
+  const activeNodes = payload.nodes.filter((node) => !node.archived);
   const units = payload.nodes.filter((node) => node.kind === "cycle" && !node.archived).map((node) => {
-    const branch = descendants(payload.nodes.filter((item) => !item.archived), node.id);
+    const branch = descendants(activeNodes, node.id);
     return { node, branch, subcycles: branch.filter((item) => item.kind === "subcycle"), tasks: branch.filter((item) => item.kind === "task") };
   }).filter(({ node, branch }) => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -1153,18 +1273,51 @@ function CoordinationView({ payload, userById, select, open }: { payload: Portal
     const matchesState = state === "all" || state === "risk" && branch.some((item) => item.health !== "normal") || state === "active" && !["completed", "cancelled"].includes(node.lifecycle) || state === "completed" && node.lifecycle === "completed";
     return matchesQuery && matchesOwner && matchesState;
   });
-  const visibleNodeIds = new Set(units.flatMap(({ node, branch }) => [...nodePath(payload.nodes, node).map((item) => item.id), ...branch.map((item) => item.id)]));
-  const openQuestions = (payload.discussions || []).filter((message) => message.kind === "question" && !message.resolvedAt && visibleNodeIds.has(message.nodeId));
+  const scopeIds = new Set(units.flatMap(({ node, branch }) => [...nodePath(payload.nodes, node).map((item) => item.id), ...branch.map((item) => item.id)]));
+  const attentionNodes = activeNodes.map((node) => ({ node, reasons: coordinationAttentionReasons(payload, node) })).filter(({ node, reasons }) => scopeIds.has(node.id) && reasons.length);
+  const filtersActive = Boolean(query.trim() || ownerId !== "all" || state !== "all");
+  const tableIds = new Set<string>();
+  const matchesTableFilter = (node: WorkNode) => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return (!normalizedQuery || `${node.code} ${node.title} ${node.result}`.toLowerCase().includes(normalizedQuery))
+      && (ownerId === "all" || node.ownerId === ownerId || node.assigneeId === ownerId)
+      && (state === "all" || state === "risk" && coordinationAttentionReasons(payload, node).length > 0 || state === "active" && !["completed", "cancelled"].includes(node.lifecycle) || state === "completed" && node.lifecycle === "completed");
+  };
+  for (const { branch } of units) {
+    for (const node of branch) {
+      if (!filtersActive || matchesTableFilter(node)) {
+        tableIds.add(node.id);
+        for (const ancestor of nodePath(payload.nodes, node)) tableIds.add(ancestor.id);
+      }
+    }
+  }
+  const goals = activeNodes.filter((node) => node.kind === "goal" && units.some((unit) => unit.node.parentId === node.id));
+  const orphanCycles = units.filter((unit) => !unit.node.parentId || !goals.some((goal) => goal.id === unit.node.parentId)).map((unit) => unit.node);
+  const toggleRow = (id: string) => setExpandedRows((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  const expandStructure = () => setExpandedRows(new Set(activeNodes.filter((node) => tableIds.has(node.id) && node.kind !== "task").map((node) => node.id)));
+  const expandWithReports = () => setExpandedRows(new Set(activeNodes.filter((node) => tableIds.has(node.id)).map((node) => node.id)));
+  const childNodes = (node: WorkNode) => {
+    if (node.kind === "goal") return units.map((unit) => unit.node).filter((cycle) => cycle.parentId === node.id);
+    return activeNodes.filter((candidate) => candidate.parentId === node.id && (candidate.kind === "subcycle" || candidate.kind === "task") && tableIds.has(candidate.id));
+  };
+  const renderCoordinationRow = (node: WorkNode, depth = 0): React.ReactNode => {
+    const children = childNodes(node);
+    const reports = node.kind === "task" ? [...(node.updates || [])].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 3) : [];
+    const hasChildren = children.length > 0 || reports.length > 0;
+    const opened = filtersActive && node.kind !== "task" || expandedRows.has(node.id);
+    const reasons = coordinationAttentionReasons(payload, node);
+    return <div key={node.id} className={`coordination-tree-branch level-${node.kind}`}>
+      <div className="coordination-tree-row" style={{ "--coord-depth": depth } as React.CSSProperties}>
+        <div className="coordination-object-cell"><button className="coordination-expand" disabled={!hasChildren} onClick={() => toggleRow(node.id)} aria-label={opened ? "Згорнути рівень" : "Розгорнути рівень"}>{hasChildren ? opened ? "⌄" : "›" : "·"}</button><button className="coordination-object" onClick={() => select(node.id)}><span>{node.code}</span><strong>{node.title}</strong><small>{node.kind === "cycle" ? coordinationCadenceLabel(node) : kindLabels[node.kind]}</small></button></div>
+        <span className="coordination-owner">{userById(node.assigneeId)?.name || "—"}</span><StatusBadge node={node} /><span className="coordination-progress">{node.progress}%</span><time>{dateLabel(node.plannedEnd)}</time><div className="coordination-row-attention">{reasons.slice(0, 2).map((reason) => <span key={reason}>{reason}</span>)}{reasons.length > 2 && <b>+{reasons.length - 2}</b>}{node.kind === "cycle" && <button onClick={() => open(node)}>Координація</button>}</div>
+      </div>
+      {opened && children.map((child) => renderCoordinationRow(child, depth + 1))}
+      {opened && reports.map((report) => <div className="coordination-report-row" key={report.id} style={{ "--coord-depth": depth + 1 } as React.CSSProperties}><div><span>{new Date(report.createdAt).toLocaleString("uk-UA")}</span><strong>{report.summary}</strong><small>{userById(report.createdBy)?.name || "Asana"}</small></div><span>{lifecycleLabels[report.lifecycle]}</span><span>{report.progress}%</span><span>{report.forecastEnd ? dateLabel(report.forecastEnd) : "Без прогнозу"}</span><p>{report.nextAction || "Наступну дію не вказано"}</p></div>)}
+    </div>;
+  };
   return <><PageIntro kicker="Одиниця координації" title="Координація за управлінськими циклами" text="Предмет координації — зведений стан усіх завдань циклу з розрізом за підциклами, строками, блокерами, рішеннями та прийманням." actions={<div className="page-filter-bar"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Пошук циклу, підциклу або завдання…" /><select value={ownerId} onChange={(event) => setOwnerId(event.target.value)}><option value="all">Усі відповідальні</option>{payload.users.filter((user) => user.active).map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select><select value={state} onChange={(event) => setState(event.target.value as typeof state)}><option value="all">Усі стани</option><option value="active">Активні цикли</option><option value="risk">Є ризик у гілці</option><option value="completed">Завершені цикли</option></select></div>} />
-    <section className="panel coordination-questions"><div className="panel-head"><div><span>Відкриті питання</span><h2>Потребують відповіді під час координації</h2></div><b className="count amber">{openQuestions.length}</b></div><div>{openQuestions.map((message) => { const node = payload.nodes.find((item) => item.id === message.nodeId); return <button key={message.id} onClick={() => select(message.nodeId)}><span>{node?.code || "—"}</span><strong>{message.text}</strong><small>{userById(message.authorId)?.name} · {new Date(message.createdAt).toLocaleString("uk-UA")}</small></button>; })}{!openQuestions.length && <p className="empty-state padded">Незакритих питань за вибраними фільтрами немає.</p>}</div></section>
-    <div className="coordination-list">{units.map(({ node, branch, subcycles, tasks }) => {
-      const branchIds = new Set(branch.map((item) => item.id));
-      const blockers = payload.blockers.filter((item) => item.status === "open" && branchIds.has(item.nodeId));
-      const decisions = payload.decisions.filter((item) => item.status === "requested" && branchIds.has(item.nodeId));
-      const snapshots = payload.coordinations.filter((item) => item.cycleId === node.id || branchIds.has(item.subcycleId));
-      const goal = node.parentId ? payload.nodes.find((item) => item.id === node.parentId) : undefined;
-      return <article className="coordination-card cycle-coordination" key={node.id}><header><div><span>Управлінський цикл · {node.code}{goal ? ` · ${goal.code}` : ""}</span><h2>{node.title}</h2></div><StatusBadge node={node} /></header><div className="coordination-body"><ProgressRing value={node.progress} /><div className="coordination-metrics"><div><strong>{tasks.filter((task) => task.lifecycle === "completed").length}/{tasks.length}</strong><span>завдань завершено</span></div><div className="red"><strong>{blockers.length}</strong><span>блокери</span></div><div className="amber"><strong>{decisions.length}</strong><span>рішення</span></div><div><strong>{snapshots.length}</strong><span>знімки циклу</span></div></div></div><section className="coordination-subcycles"><div><span>Підцикли</span><b>{subcycles.length}</b></div>{subcycles.map((subcycle) => { const subcycleIds = new Set(descendants(payload.nodes, subcycle.id).map((item) => item.id)); const subTasks = tasks.filter((task) => subcycleIds.has(task.id)); return <button key={subcycle.id} onClick={() => select(subcycle.id)}><span>{subcycle.code}</span><strong>{subcycle.title}</strong><small>{subTasks.filter((task) => task.lifecycle === "completed").length}/{subTasks.length} завдань</small><em>{subcycle.progress}%</em><StatusBadge node={subcycle} /></button>; })}{!subcycles.length && <p className="empty-state">Підциклів немає — завдання координуються безпосередньо в циклі.</p>}</section><section className="coordination-task-list"><div className="coordination-list-head"><span>Зведення за завданнями</span><b>{tasks.length}</b></div>{tasks.map((task) => { const parent = task.parentId ? payload.nodes.find((item) => item.id === task.parentId) : undefined; return <button key={task.id} onClick={() => select(task.id)}><span>{task.code}</span><strong>{task.title}<small>{parent?.kind === "subcycle" ? parent.code : "Безпосередньо в циклі"}</small></strong><em>{task.progress}%</em><StatusBadge node={task} /></button>; })}{!tasks.length && <p className="empty-state">У циклі ще немає завдань для зведеної координації.</p>}</section><footer><div><UserAvatar compact user={userById(node.ownerId)} /><span>{userById(node.ownerId)?.name} · {node.coordinationCadence || "Без графіка"}</span></div><div><button onClick={() => select(node.id)}>Відкрити цикл</button><button className="primary" onClick={() => open(node)}>Нова координація циклу</button></div></footer></article>;
-    })}{!units.length && <p className="empty-state padded">За вибраними фільтрами управлінських циклів немає.</p>}</div>
+    <section className="panel coordination-attention"><div className="panel-head"><div><span>Контроль і реакція</span><h2>Потребує координації</h2></div><b className="count amber">{attentionNodes.length}</b></div><div className="coordination-attention-table"><div className="coordination-attention-head"><span>Об’єкт</span><span>Причини</span><span>Відповідальний</span><span>Строк</span></div>{attentionNodes.map(({ node, reasons }) => <button key={node.id} onClick={() => select(node.id)}><div><span>{node.code} · {kindLabels[node.kind]}</span><strong>{node.title}</strong></div><div>{reasons.map((reason) => <span key={reason}>{reason}</span>)}</div><span>{userById(node.assigneeId)?.name || "—"}</span><time>{dateLabel(node.plannedEnd)}</time></button>)}{!attentionNodes.length && <p className="empty-state padded">За вибраними фільтрами немає об’єктів, що потребують координації.</p>}</div></section>
+    <section className="panel coordination-tree-table"><div className="panel-head"><div><span>Зведена звітність циклів</span><h2>Ціль → цикл → підцикл → завдання → три останні звіти</h2></div><div className="coordination-tree-controls"><button onClick={expandStructure}>Розгорнути рівні</button><button onClick={expandWithReports}>Показати звіти</button><button onClick={() => setExpandedRows(new Set())}>Згорнути все</button><b className="count">{units.length}</b></div></div><div className="coordination-tree-head"><span>Об’єкт управління</span><span>Відповідальний</span><span>Статус</span><span>Прогрес</span><span>Строк</span><span>Увага / дія</span></div><div className="coordination-tree-body">{goals.map((goal) => renderCoordinationRow(goal))}{orphanCycles.map((cycle) => renderCoordinationRow(cycle))}{!units.length && <p className="empty-state padded">За вибраними фільтрами управлінських циклів немає.</p>}</div></section>
   </>;
 }
 
@@ -1277,11 +1430,11 @@ function AsanaSyncPanel({ payload, selected, asanaStatus, mutate, setNotice, com
     setSearching(true); setSearchMessage(""); setNotice("");
     try {
       const response = await fetch(`/api/asana/tasks/search?q=${encodeURIComponent(searchQuery.trim())}`, { cache: "no-store" });
-      const result = (await response.json()) as { error?: string; limitedSearch?: boolean; tasks?: typeof searchResults };
+      const result = (await response.json()) as { error?: string; limitedSearch?: boolean; partial?: boolean; tasks?: typeof searchResults };
       if (!response.ok) throw new Error(result.error || "Не вдалося виконати пошук в Asana");
       const tasks = result.tasks || [];
       setSearchResults(tasks);
-      setSearchMessage(tasks.length ? `${tasks.length} збігів${result.limitedSearch ? " · безкоштовний пошук лише серед ваших активних завдань" : ""}` : "За цією назвою активних завдань не знайдено");
+      setSearchMessage(tasks.length ? `${tasks.length} збігів${result.limitedSearch ? " · резервний пошук серед ваших задач" : ""}${result.partial ? " · частина робочих просторів недоступна" : ""}` : result.partial ? "У доступних робочих просторах збігів не знайдено" : "За цією назвою задач не знайдено");
     } catch (error) {
       setSearchResults([]);
       setSearchMessage(error instanceof Error ? error.message : "Не вдалося виконати пошук в Asana");
@@ -1449,7 +1602,7 @@ function NodeModal({ node, setNode, nodes, users, errors, clearError, close, sav
       <Field label="Прогноз" hint="Поточна реалістична дата завершення; може відрізнятися від плану."><input type="date" value={node.forecastEnd} onChange={(event) => update("forecastEnd", event.target.value)} /></Field>
       <Field label="Прогрес, %" required hint={node.kind === "task" ? "Частка фактично отриманого результату, а не витраченого часу." : "Для цілі, циклу й підциклу прогрес автоматично розраховується з нижчих рівнів."}><input type="number" min="0" max="100" value={node.progress} disabled={node.kind !== "task"} onChange={(event) => update("progress", Number(event.target.value))} /></Field>
       <Field label="Спосіб початку" required hint="Визначає, коли робота може стартувати: разом із батьківським рівнем, за датою, після залежності або після звільнення ресурсу."><select value={node.startMode} onChange={(event) => update("startMode", event.target.value as StartMode)}>{Object.entries(startLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
-      <Field label="Періодичність координації" hint="Як часто власник або координатор переглядає стан цього рівня." example="Щопонеділка о 10:00 або щотижня"><input value={node.coordinationCadence} onChange={(event) => update("coordinationCadence", event.target.value)} placeholder="Наприклад: щотижня" /></Field>
+      {node.kind === "cycle" && <><Field label="Перша координація" hint="Дата першого зведеного перегляду циклу; від неї календар розраховує наступні події."><input type="date" value={node.coordinationStartDate || ""} onChange={(event) => { const value = event.target.value; setNode({ ...node, coordinationStartDate: value, coordinationWeekday: value ? new Date(`${value}T12:00:00`).getDay() : node.coordinationWeekday }); }} /></Field><Field label="День координації" hint="Виберіть день тижня. Якщо першу дату вже задано, вона пересунеться вперед до обраного дня."><select value={node.coordinationWeekday ?? 1} onChange={(event) => { const weekday = Number(event.target.value); setNode({ ...node, coordinationWeekday: weekday, coordinationStartDate: alignDateToWeekday(node.coordinationStartDate || "", weekday) }); }}>{weekdayLabels.map((label, index) => <option key={label} value={index}>{label}</option>)}</select></Field><Field label="Періодичність, днів" hint="Кількість календарних днів між координаціями циклу." example="7 — щотижня; 14 — раз на два тижні"><input type="number" min="1" max="365" value={node.coordinationIntervalDays || 7} onChange={(event) => update("coordinationIntervalDays", Math.max(1, Number(event.target.value) || 1))} /></Field></>}
       <Field wide label="Повноваження" hint="Які рішення відповідальний може приймати самостійно та що повинен погоджувати."><textarea value={node.authority} onChange={(event) => update("authority", event.target.value)} placeholder="Самостійні рішення, межі та ескалація" /></Field>
       <Field wide label="Ресурс" hint="Люди, бюджет, матеріали, доступи або час, потрібні для результату."><textarea value={node.resource} onChange={(event) => update("resource", event.target.value)} placeholder="Наприклад: 8 годин дизайнера та доступ до CMS" /></Field>
       <Field wide label="Контрольне місце" hint="Система або сторінка, де перевіряється фактичне виконання. Кнопка «+» додає ще одне контрольне місце." example="Asana, CRM, сторінка сайту або реєстр договорів"><div className="multi-value-field">{controlPlaces.map((place, index) => <div key={index}><input value={place} onChange={(event) => setControlPlace(index, event.target.value)} placeholder="Наприклад: Asana або сторінка сайту" />{index === controlPlaces.length - 1 && <button type="button" onClick={() => update("controlPlace", `${node.controlPlace}${node.controlPlace ? "\n" : ""}`)} aria-label="Додати контрольне місце">+</button>}</div>)}</div></Field>

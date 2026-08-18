@@ -102,6 +102,9 @@ export type WorkNode = {
   resource: string;
   authority: string;
   coordinationCadence: string;
+  coordinationStartDate?: string;
+  coordinationIntervalDays?: number;
+  coordinationWeekday?: number;
   controlPlace: string;
   visibility: "company" | "participants";
   archived: boolean;
@@ -198,6 +201,7 @@ export type DiscussionMessage = {
   replyToId?: string;
   relatedType?: "decision" | "acceptance";
   relatedId?: string;
+  requiresResponse?: boolean;
   resolvedAt?: string;
   resolvedBy?: string;
 };
