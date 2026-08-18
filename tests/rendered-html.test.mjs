@@ -152,9 +152,9 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /три останні звіти/);
   assert.match(source, /slice\(0, 3\)/);
   assert.match(source, /Показати звіти/);
-  assert.match(source, /Цикл → підцикл → завдання → три останні звіти/);
+  assert.match(source, /Стратегічна ціль → управлінський цикл → підцикл → завдання → три останні звіти/);
   assert.match(source, /useState<Set<string>>\(\(\) => new Set\(\)\)/);
-  assert.doesNotMatch(source, /Ціль → цикл → підцикл → завдання/);
+  assert.match(source, /goals\.map\(\(goal\) => renderCoordinationRow\(goal\)\)/);
   assert.match(source, /Календар строків і координацій/);
   assert.match(source, /Перша координація/);
   assert.match(source, /Періодичність, днів/);
