@@ -128,6 +128,11 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /portal:node-draft/);
   assert.match(source, /Дані автоматично оновлено/);
   assert.match(source, /Питання, рішення, погодження та коментарі/);
+  assert.match(source, /Редагувати/);
+  assert.match(source, /Видалити/);
+  assert.match(source, /Зберегти зміни/);
+  assert.match(source, /deletedAt/);
+  assert.match(source, /editedAt/);
   assert.match(source, /Вхідні та сповіщення/);
   assert.match(source, /Повернути з коментарем/);
   assert.match(source, /Зафіксувати інше рішення/);
@@ -164,6 +169,10 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /Координація за управлінськими циклами/);
   assert.match(source, /Предмет координації — зведений стан усіх завдань циклу/);
   assert.match(source, /Потребує координації/);
+  assert.match(source, /matchesExecutorAndState/);
+  assert.match(source, /item\.assigneeId === ownerId/);
+  assert.match(source, /node\.assigneeId === ownerId/);
+  assert.match(source, /Усі виконавці/);
   assert.match(source, /Цикл без завдань/);
   assert.match(source, /три останні звіти/);
   assert.match(source, /slice\(0, 3\)/);

@@ -77,7 +77,8 @@ export async function POST(request: Request) {
     const nodeId = after?.nodeId || before?.nodeId;
     const node = current.nodes.find((candidate) => candidate.id === nodeId) || body.state.nodes.find((candidate) => candidate.id === nodeId);
     const addressed = [...(current.discussions || []), ...(body.state.discussions || [])].some((message) => message.nodeId === nodeId && message.recipientId === user.id);
-    if (!node || !(mayEdit(user, node.ownerId) || node.assigneeId === user.id || node.acceptorId === user.id || node.participantIds.includes(user.id) || addressed)) {
+    const authored = before?.authorId === user.id || after?.authorId === user.id;
+    if (!node || !(mayEdit(user, node.ownerId) || node.assigneeId === user.id || node.acceptorId === user.id || node.participantIds.includes(user.id) || addressed || authored)) {
       return jsonError("Недостатньо повноважень для повідомлення в цій картці", 403);
     }
   }

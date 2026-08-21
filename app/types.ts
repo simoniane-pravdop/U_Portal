@@ -203,6 +203,10 @@ export type DiscussionMessage = {
   relatedType?: "decision" | "acceptance";
   relatedId?: string;
   requiresResponse?: boolean;
+  editedAt?: string;
+  editedBy?: string;
+  deletedAt?: string;
+  deletedBy?: string;
   resolvedAt?: string;
   resolvedBy?: string;
 };

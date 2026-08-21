@@ -645,6 +645,14 @@ tbody tr:hover { background: #f8fafc; }
 .discussion-list article > div { display: flex; align-items: center; gap: 6px; }
 .discussion-list article time { margin-left: auto; color: var(--muted); font-size: 7px; }
 .discussion-list article strong { font-size: 8px; }
+.message-actions { display: flex; gap: 3px; }
+.message-actions button { padding: 4px 5px; border: 1px solid var(--line); border-radius: 4px; color: var(--navy-700); background: #fff; font-size: 6px; font-weight: 800; }
+.message-actions button.delete { color: var(--red); border-color: #e9bdc0; }
+.message-edit-form { display: grid; gap: 5px; margin-top: 7px; }
+.message-edit-form textarea { min-height: 68px; padding: 7px; border: 1px solid var(--line); border-radius: 6px; resize: vertical; }
+.message-edit-form > div { display: flex; justify-content: flex-end; gap: 5px; }
+.message-edit-form button { padding: 6px 8px; border: 1px solid var(--line); border-radius: 5px; color: var(--navy-700); background: #fff; font-size: 7px; font-weight: 800; }
+.message-edit-form button.primary { color: #fff; background: var(--navy-800); }
 .question-state { padding: 3px 5px; border-radius: 999px; color: #75571c; background: var(--amber-soft); font-size: 6px; font-weight: 850; text-transform: uppercase; }
 .discussion-list article p { margin: 6px 0 0; color: #33465c; font-size: 9px; line-height: 1.45; }
 .message-recipient { color: var(--muted); font-size: 7px; }
