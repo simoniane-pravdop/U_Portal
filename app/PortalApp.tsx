@@ -51,6 +51,7 @@ const lifecycleLabels: Record<LifecycleStatus, string> = {
 };
 const healthLabels: Record<HealthStatus, string> = { normal: "Нормально", risk: "Є ризик", blocked: "Заблоковано" };
 const kindLabels: Record<NodeKind, string> = { goal: "Стратегічна ціль", cycle: "Управлінський цикл", subcycle: "Підцикл", task: "Завдання" };
+const priorityLabels: Record<WorkNode["priority"], string> = { critical: "Критичний", high: "Високий", normal: "Нормальний", low: "Низький" };
 const startLabels: Record<StartMode, string> = {
   with_parent: "Разом із батьківським рівнем",
   manual_capacity: "Після звільнення ресурсу",
@@ -175,6 +176,57 @@ function nodePath(nodes: WorkNode[], node: WorkNode) {
     current = current.parentId ? nodes.find((item) => item.id === current?.parentId) : undefined;
   }
   return path;
+}
+
+function buildAsanaDescription(payload: PortalPayload, node: WorkNode) {
+  const userName = (id: string) => payload.users.find((user) => user.id === id)?.name || "Не визначено";
+  const text = (value: string) => value.trim() || "Не визначено";
+  const path = nodePath(payload.nodes, node).map((item) => `${item.code} · ${item.title}`).join(" → ");
+  const participants = node.participantIds.map(userName).join(", ") || "Не визначено";
+  const recurrence = node.recurrence.enabled ? `${node.recurrence.frequency === "weekly" ? "Щотижня" : node.recurrence.frequency === "monthly" ? "Щомісяця" : node.recurrence.frequency === "quarterly" ? "Щокварталу" : "Щороку"}${node.recurrence.interval > 1 ? ` · інтервал ${node.recurrence.interval}` : ""}${node.recurrence.nextDate ? ` · наступна дата ${dateLabel(node.recurrence.nextDate)}` : ""}` : "Немає";
+  return [
+    "ПАСПОРТ КАРТКИ ПОРТАЛУ",
+    "",
+    "МІСЦЕ В СТРУКТУРІ",
+    `Шлях: ${path}`,
+    `Рівень: ${kindLabels[node.kind]}`,
+    `Код: ${node.code}`,
+    `Назва: ${node.title}`,
+    "",
+    "РЕЗУЛЬТАТ І МЕЖІ",
+    `Опис: ${text(node.description)}`,
+    `Готовий результат: ${text(node.result)}`,
+    `Що не є результатом: ${text(node.nonResult)}`,
+    `Критерій приймання: ${text(node.acceptanceCriteria)}`,
+    "",
+    "ВІДПОВІДАЛЬНІ",
+    `Координатор: ${userName(node.ownerId)}`,
+    `Виконавець: ${userName(node.assigneeId)}`,
+    `Керівник вищої ланки: ${userName(node.acceptorId)}`,
+    `Учасники / фоловери: ${participants}`,
+    "",
+    "СТРОКИ ТА СТАН",
+    `Дата початку: ${dateLabel(node.plannedStart)}`,
+    `Дедлайн до - ${dateLabel(node.plannedEnd)}`,
+    `Прогноз завершення: ${dateLabel(node.forecastEnd)}`,
+    `Фактичний початок: ${dateLabel(node.actualStart)}`,
+    `Фактичне завершення: ${dateLabel(node.actualEnd)}`,
+    `Статус: ${lifecycleLabels[node.lifecycle]}`,
+    `Стан виконання: ${healthLabels[node.health]}`,
+    `Прогрес: ${node.progress}%`,
+    `Пріоритет: ${priorityLabels[node.priority]}`,
+    "",
+    "УМОВИ ВИКОНАННЯ",
+    `Спосіб початку: ${startLabels[node.startMode]}`,
+    `Повноваження: ${text(node.authority)}`,
+    `Ресурс: ${text(node.resource)}`,
+    `Контрольне місце: ${text(node.controlPlace)}`,
+    `Доступ: ${node.visibility === "company" ? "Уся компанія" : "Лише учасники"}`,
+    `Повторення: ${recurrence}`,
+    ...(node.kind === "cycle" ? [`Графік координації: ${coordinationCadenceLabel(node)}`] : []),
+    "",
+    `Оновлено в порталі: ${new Date(node.updatedAt).toLocaleString("uk-UA")}`,
+  ].join("\n");
 }
 
 function descendants(nodes: WorkNode[], rootId: string) {
@@ -1221,6 +1273,7 @@ function MyWork({ payload, selected, selectedId, setSelectedId, initialFilter, f
       </aside>
       {current ? <section className="work-desk"><header className="work-desk-head"><div><span>{kindLabels[current.kind]} · {current.code}</span><h2>{current.title}</h2><p>{current.result}</p></div><div><ProgressRing value={current.progress} />{mayEditCard && <button className="secondary" onClick={() => void openEdit(current)}>Редагувати картку</button>}<button className="secondary" onClick={() => void copyNodeLink(current, "my")}>Посилання</button>{current.kind === "task" && <button className="secondary" onClick={() => document.getElementById(`asana-link-${current.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}>Asana</button>}{!["acceptance", "completed"].includes(current.lifecycle) && mayWork && <button className="positive" disabled={Boolean(completionReason)} title={completionReason || "Позначити завершеним"} onClick={() => void completeNode(current)}>Завершити</button>}<button className="secondary" onClick={() => openTree(current.id)}>Паспорт у дереві</button></div></header><div className="status-line"><StatusBadge node={current} />{current.decisionRequired && <span className="decision-badge">Потрібне рішення</span>}<span>Строк {dateLabel(current.plannedEnd)}</span><span>Прогноз {dateLabel(current.forecastEnd)}</span>{completionReason && <span className="completion-hint">{completionReason}</span>}</div>
         <div className="work-summary-grid"><article><span>Координатор</span><div className="person-line"><UserAvatar user={userById(current.ownerId)} compact /><strong>{userById(current.ownerId)?.name}</strong></div></article><article><span>Виконавець</span><div className="person-line"><UserAvatar user={userById(current.assigneeId)} compact /><strong>{userById(current.assigneeId)?.name}</strong></div></article><article><span>Керівник вищої ланки</span><div className="person-line"><UserAvatar user={userById(current.acceptorId)} compact /><strong>{userById(current.acceptorId)?.name}</strong></div></article></div>
+        <WorkCardDescription node={current} payload={payload} userById={userById} />
         {current.kind === "task" ? <div className="execution-grid"><div><WorkStatusForm key={current.id} node={current} disabled={!mayWork} notify={setNotice} save={(update) => saveWorkUpdate(current, update)} /><section className="work-section"><div className="work-section-head"><div><span>Результат</span><h3>Докази та передання</h3></div><button onClick={() => setModal("evidence")}>+ Додати доказ</button></div><p>{current.acceptanceCriteria}</p><div className="evidence-stack">{current.evidence.map((item) => <a key={item.id} href={item.kind === "note" ? undefined : item.value} target="_blank" rel="noreferrer"><b>{item.label}</b><span>{item.kind === "file" ? "Файл" : item.kind === "link" ? "Посилання" : item.value}</span></a>)}{!current.evidence.length && <span className="empty-state">Доказів ще немає.</span>}</div><div className="work-action-row"><button onClick={() => setModal("blocker")}>Додати блокер</button><button onClick={() => setModal("decision")}>Запитати рішення</button><button onClick={() => setModal("dependency")}>Додати залежність</button></div><small className="completion-explainer">Після натискання «Завершити» результат автоматично надсилається координатору та керівнику вищої ланки. Статус «Завершено» і 100% встановлюються після приймання керівником.</small></section></div><aside><AsanaSyncPanel key={`${current.id}-${current.asana.taskGid}`} payload={payload} selected={current} asanaStatus={asanaStatus} mutate={mutate} setNotice={setNotice} compact /><WorkUpdateHistory node={current} userById={userById} /></aside></div> : <div className="aggregate-work"><section className="work-section aggregate-note"><span>Агрегований рівень</span><h3>Стан цього рівня формується з нижчих рівнів</h3><p>{current.kind === "cycle" ? "Зведений стан циклу формується з усіх його підциклів і завдань та є предметом координації." : "Підцикл показує агрегований стан своїх завдань і входить до координації батьківського циклу."}</p>{current.kind === "cycle" && <button className="primary" onClick={() => setModal("coordination")}>Зафіксувати координацію циклу</button>}</section><section className="work-section"><div className="work-section-head"><div><span>Нижчі рівні</span><h3>Джерела стану</h3></div><b>{children.length}</b></div><div className="aggregate-children">{children.map((node) => <button key={node.id} onClick={() => setSelectedId(node.id)}><span>{node.code}</span><strong>{node.title}</strong><em>{node.progress}%</em><StatusBadge node={node} /></button>)}</div></section></div>}
         <ManagerActionCenter node={current} payload={payload} latestAcceptance={latestAcceptance} openDecisions={openDecisions} userById={userById} resolveAcceptance={resolveAcceptance} resolveDecision={resolveDecision} mutate={mutate} />
         {decidedDecisions.length > 0 && <section className="work-section decision-workflow"><div className="work-section-head"><div><span>Історія рішень</span><h3>Прийняті управлінські рішення</h3></div><b>{decidedDecisions.length}</b></div>{decidedDecisions.map((decision) => <DecisionActionCard key={decision.id} decision={decision} owner={userById(decision.decisionOwnerId)} canDecide={false} resolve={resolveDecision} />)}</section>}
@@ -1261,6 +1314,13 @@ function WorkStatusForm({ node, disabled, save, notify }: { node: WorkNode; disa
 
 function WorkUpdateHistory({ node, userById }: { node: WorkNode; userById: (id: string) => PortalUser | undefined }) {
   return <section className="work-section update-panel"><div className="work-section-head"><div><span>Системний слід</span><h3>Останні звіти</h3></div><b>{(node.updates || []).length}</b></div><div className="update-history">{(node.updates || []).slice(0, 8).map((update) => <article key={update.id}><time>{new Date(update.createdAt).toLocaleString("uk-UA")}</time><strong>{lifecycleLabels[update.lifecycle]} · {update.progress}%</strong><p>{update.summary}</p><small>{userById(update.createdBy)?.name || "Asana"}{update.nextAction ? ` · Далі: ${update.nextAction}` : ""}</small></article>)}{!(node.updates || []).length && <p className="empty-state">Звітів ще немає.</p>}</div></section>;
+}
+
+function WorkCardDescription({ node, payload, userById }: { node: WorkNode; payload: PortalPayload; userById: (id: string) => PortalUser | undefined }) {
+  const path = nodePath(payload.nodes, node);
+  const participants = node.participantIds.map((id) => userById(id)?.name).filter(Boolean).join(", ");
+  const value = (text: string) => text.trim() || "Не визначено";
+  return <details className="work-card-description"><summary><div><span>Паспорт робочої картки</span><strong>Опис картки</strong><small>{path.map((item) => item.code).join(" / ")} · {node.description || node.result}</small></div><i className="details-state" aria-hidden="true" /></summary><div className="work-card-description-body"><section><h4>Місце в структурі</h4><dl><dt>Шлях</dt><dd>{path.map((item) => `${item.code} · ${item.title}`).join(" → ")}</dd><dt>Рівень</dt><dd>{kindLabels[node.kind]}</dd><dt>Код і назва</dt><dd>{node.code} · {node.title}</dd></dl></section><section><h4>Результат і межі</h4><dl><dt>Опис</dt><dd>{value(node.description)}</dd><dt>Готовий результат</dt><dd>{value(node.result)}</dd><dt>Що не є результатом</dt><dd>{value(node.nonResult)}</dd><dt>Критерій приймання</dt><dd>{value(node.acceptanceCriteria)}</dd></dl></section><section><h4>Відповідальні</h4><dl><dt>Координатор</dt><dd>{userById(node.ownerId)?.name || "Не визначено"}</dd><dt>Виконавець</dt><dd>{userById(node.assigneeId)?.name || "Не визначено"}</dd><dt>Керівник вищої ланки</dt><dd>{userById(node.acceptorId)?.name || "Не визначено"}</dd><dt>Учасники / фоловери</dt><dd>{participants || "Не визначено"}</dd></dl></section><section><h4>Строки та стан</h4><dl><dt>Дата початку</dt><dd>{dateLabel(node.plannedStart)}</dd><dt>Дедлайн до</dt><dd>{dateLabel(node.plannedEnd)}</dd><dt>Прогноз завершення</dt><dd>{dateLabel(node.forecastEnd)}</dd><dt>Статус</dt><dd>{lifecycleLabels[node.lifecycle]} · {node.progress}%</dd><dt>Стан виконання</dt><dd>{healthLabels[node.health]}</dd><dt>Пріоритет</dt><dd>{priorityLabels[node.priority]}</dd></dl></section><section><h4>Умови виконання</h4><dl><dt>Спосіб початку</dt><dd>{startLabels[node.startMode]}</dd><dt>Повноваження</dt><dd>{value(node.authority)}</dd><dt>Ресурс</dt><dd>{value(node.resource)}</dd><dt>Контрольне місце</dt><dd>{value(node.controlPlace)}</dd><dt>Доступ</dt><dd>{node.visibility === "company" ? "Уся компанія" : "Лише учасники"}</dd>{node.kind === "cycle" && <><dt>Координація</dt><dd>{coordinationCadenceLabel(node)}</dd></>}</dl></section></div></details>;
 }
 
 function AcceptanceActionBox({ node, acceptance, resolve }: { node: WorkNode; acceptance: Acceptance; resolve: (acceptance: Acceptance, accepted: boolean, feedback?: string) => Promise<boolean> }) {
@@ -1473,7 +1533,7 @@ function AsanaSyncPanel({ payload, selected, asanaStatus, mutate, setNotice, com
       const normalizedTaskGid = normalizeTaskGid(taskOverride || taskGid || selected.asana.taskGid);
       const resolvedProjectGid = action === "read" ? "" : projectGid || selected.asana.projectGid;
       const resolvedWorkspaceGid = workspaceGid || selected.asana.workspaceGid || (!resolvedProjectGid && asanaWorkspaces.length === 1 ? asanaWorkspaces[0].gid : "");
-      const response = await fetch("/api/asana/sync", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, nodeId: selected.id, taskGid: normalizedTaskGid, projectGid: resolvedProjectGid, workspaceGid: resolvedWorkspaceGid, title: selected.title, description: `${selected.code}\n\n${selected.result}\n\nКритерій приймання: ${selected.acceptanceCriteria}`, dueOn: selected.plannedEnd, completed: selected.lifecycle === "completed" }) });
+      const response = await fetch("/api/asana/sync", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, nodeId: selected.id, taskGid: normalizedTaskGid, projectGid: resolvedProjectGid, workspaceGid: resolvedWorkspaceGid, title: selected.title, description: buildAsanaDescription(payload, selected), startOn: selected.plannedStart, dueOn: selected.plannedEnd, completed: selected.lifecycle === "completed" }) });
       const result = (await response.json()) as { error?: string; workspaceGid?: string; followerSync?: { added: number; skipped: string[] }; data?: { gid?: string; name?: string; notes?: string; due_on?: string | null; completed?: boolean; permalink_url?: string; modified_at?: string; assignee?: { email?: string; name?: string }; projects?: Array<{ gid: string; name: string }>; followers?: Array<{ gid: string; name: string; email?: string }> } };
       if (!response.ok) throw new Error(result.error || "Помилка Asana");
       const task = result.data || {};

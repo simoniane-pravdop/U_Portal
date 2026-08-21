@@ -9,6 +9,7 @@ type SyncBody = {
   workspaceGid?: string;
   title?: string;
   description?: string;
+  startOn?: string;
   dueOn?: string;
   completed?: boolean;
 };
@@ -76,6 +77,7 @@ export async function POST(request: Request) {
             name: body.title || node.title,
             notes: body.description || `${node.code}\n\n${node.result}\n\nКритерій приймання: ${node.acceptanceCriteria}`,
             ...(body.projectGid ? { projects: [body.projectGid] } : { workspace: body.workspaceGid }),
+            start_on: body.startOn && (body.dueOn || node.plannedEnd) ? body.startOn : undefined,
             due_on: body.dueOn || node.plannedEnd || undefined,
             assignee: connection?.asana_user_gid || undefined,
           },
@@ -86,7 +88,10 @@ export async function POST(request: Request) {
       const data: Record<string, unknown> = {};
       if (node.asana.rules.title === "portal") data.name = body.title;
       if (node.asana.rules.description === "portal") data.notes = body.description;
-      if (node.asana.rules.dates === "portal") data.due_on = body.dueOn || null;
+      if (node.asana.rules.dates === "portal") {
+        data.due_on = body.dueOn || null;
+        data.start_on = body.startOn && body.dueOn ? body.startOn : null;
+      }
       if (node.asana.rules.status === "portal") data.completed = body.completed;
       if (!Object.keys(data).length) return jsonError("Жодне поле не визначено для передання з порталу", 400);
       result = await asanaRequest(user.id, `/tasks/${encodeURIComponent(body.taskGid)}?opt_fields=gid,name,completed,due_on,assignee.name,permalink_url,modified_at,workspace.gid,workspace.name,projects.gid,projects.name`, {

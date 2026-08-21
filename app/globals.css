@@ -487,6 +487,23 @@ tbody tr:hover { background: #f8fafc; }
 .work-summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 14px 22px 0; }
 .work-summary-grid article { padding: 10px; border: 1px solid var(--line-soft); border-radius: 8px; background: #fafcfd; }
 .work-summary-grid article > span { display: block; margin-bottom: 7px; color: var(--muted); font-size: 7px; font-weight: 850; text-transform: uppercase; }
+.work-card-description { margin: 10px 22px 0; overflow: hidden; border: 1px solid var(--line-soft); border-radius: 9px; background: #f8fafc; }
+.work-card-description summary { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; list-style: none; cursor: pointer; }
+.work-card-description summary::-webkit-details-marker { display: none; }
+.work-card-description summary > div { min-width: 0; display: grid; gap: 2px; }
+.work-card-description summary span { color: var(--gold); font-size: 7px; font-weight: 900; text-transform: uppercase; }
+.work-card-description summary strong { color: var(--navy-900); font: 800 13px Georgia, serif; }
+.work-card-description summary small { overflow: hidden; color: var(--muted); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.details-state { flex: 0 0 auto; color: var(--navy-700); font-size: 8px; font-style: normal; font-weight: 850; }
+.details-state::before { content: "Розгорнути ↓"; }
+.work-card-description[open] .details-state::before { content: "Згорнути ↑"; }
+.work-card-description-body { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; padding: 0 10px 10px; border-top: 1px solid var(--line-soft); }
+.work-card-description-body section { min-width: 0; padding: 10px; border: 1px solid var(--line-soft); border-radius: 7px; background: #fff; }
+.work-card-description-body section:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.work-card-description-body h4 { margin: 0 0 8px; color: var(--navy-900); font: 800 11px Georgia, serif; }
+.work-card-description-body dl { display: grid; grid-template-columns: 115px minmax(0, 1fr); gap: 5px 8px; margin: 0; }
+.work-card-description-body dt { color: var(--muted); font-size: 7px; font-weight: 850; text-transform: uppercase; }
+.work-card-description-body dd { min-width: 0; margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; font-size: 8px; line-height: 1.4; }
 .execution-grid { display: grid; grid-template-columns: minmax(0, 1.28fr) minmax(370px, .72fr); gap: 11px; padding: 14px 22px 25px; align-items: start; }
 .work-section { margin-bottom: 11px; padding: 15px; border: 1px solid var(--line-soft); border-radius: 10px; background: #fff; }
 .work-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
@@ -977,7 +994,8 @@ tbody tr:hover { background: #f8fafc; }
 .work-inbox, .work-desk { border-radius: 9px; }
 .work-desk-head { padding: 13px 15px 11px; }
 .work-desk-head h2 { font-size: 18px; }
-.work-summary-grid { grid-template-columns: 1fr 1fr; gap: 6px; padding: 9px 14px 0; }
+  .work-summary-grid { grid-template-columns: 1fr 1fr; gap: 6px; padding: 9px 14px 0; }
+  .work-card-description { margin-inline: 14px; }
 .execution-grid { gap: 7px; padding: 9px 14px 16px; }
 .work-section { margin-bottom: 7px; padding: 11px; border-radius: 7px; }
 .coordination-list { gap: 8px; }
@@ -1085,6 +1103,9 @@ tbody tr:hover { background: #f8fafc; }
   .work-inbox-list { max-height: 185px; }
   .work-desk { min-height: 0; }
   .work-desk-head { flex-direction: column; }
+  .work-card-description { margin-inline: 10px; }
+  .work-card-description-body { grid-template-columns: 1fr; }
+  .work-card-description-body section:last-child:nth-child(odd) { grid-column: auto; }
   .approval-queue > div:last-child { grid-template-columns: 1fr; }
   .inbox-actions > div:last-child { grid-template-columns: 1fr; }
   .discussion-panel { margin-inline: 10px; }

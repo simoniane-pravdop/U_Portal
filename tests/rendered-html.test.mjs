@@ -73,6 +73,7 @@ test("durable storage and integration bindings are declared", async () => {
   const asanaSync = await readFile(new URL("../app/api/asana/sync/route.ts", import.meta.url), "utf8");
   assert.match(asanaSync, /addFollowers/);
   assert.match(asanaSync, /followers\.gid/);
+  assert.match(asanaSync, /start_on/);
   const asanaSearch = await readFile(new URL("../app/api/asana/tasks/search/route.ts", import.meta.url), "utf8");
   assert.match(asanaSearch, /резервний|fallbackParams/);
   assert.match(asanaSearch, /completed_since/);
@@ -105,6 +106,13 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /asana-search-results/);
   assert.match(source, /api\/asana\/tasks\/search/);
   assert.match(source, /Asana автоматично додається до «Контрольного місця»/);
+  assert.match(source, /buildAsanaDescription/);
+  assert.match(source, /МІСЦЕ В СТРУКТУРІ/);
+  assert.match(source, /РЕЗУЛЬТАТ І МЕЖІ/);
+  assert.match(source, /Дедлайн до -/);
+  assert.match(source, /startOn: selected\.plannedStart/);
+  assert.match(source, /Паспорт робочої картки/);
+  assert.match(source, /work-card-description/);
   assert.match(source, /Є ризик виконання/);
   assert.match(source, /completionBlockReason/);
   assert.match(source, /window\.history\.pushState/);
@@ -240,6 +248,8 @@ test("compact laptop and mobile layouts are declared", async () => {
   assert.match(css, /\.manager-action-center/);
   assert.match(css, /\.blocker-approval-card/);
   assert.match(css, /\.asana-work \.asana-create-form/);
+  assert.match(css, /\.work-card-description/);
+  assert.match(css, /\.work-card-description-body/);
   assert.match(css, /grid-template-columns: minmax\(0, 1fr\); align-items: stretch/);
   assert.match(css, /minmax\(370px, \.72fr\)/);
   assert.match(css, /\.tree-workbench\.mobile-pane-tree \.node-detail/);
