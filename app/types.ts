@@ -140,7 +140,7 @@ export type Blocker = {
   status: "open" | "resolved";
   createdAt: string;
   resolvedAt: string;
-  approvalStatus?: "pending" | "approved" | "returned";
+  approvalStatus?: "pending" | "approved" | "rejected";
   approvalComment?: string;
   approvedBy?: string;
   approvedAt?: string;

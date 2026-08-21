@@ -1,8 +1,77 @@
 import { baseUrl, currentUser, database, jsonError, loadState, mayEdit, runtimeEnv } from "../../lib/server";
 import { notifyTelegramUsers } from "../../lib/telegram";
-import type { PortalNotification, PortalState } from "../../types";
+import type { PortalNotification, PortalState, SessionUser } from "../../types";
 
 export const dynamic = "force-dynamic";
+
+function visibleNodeIds(state: PortalState, user: SessionUser) {
+  if (["owner", "admin"].includes(user.role)) return new Set(state.nodes.map((node) => node.id));
+  const ids = new Set<string>();
+  const scopeRoots = new Set<string>();
+  for (const node of state.nodes) {
+    const participates = node.ownerId === user.id || node.assigneeId === user.id || node.acceptorId === user.id || node.participantIds.includes(user.id);
+    if (node.visibility === "company" || participates) ids.add(node.id);
+    if (participates) scopeRoots.add(node.id);
+  }
+  for (const message of state.discussions || []) if (message.authorId === user.id || message.recipientId === user.id) ids.add(message.nodeId);
+  for (const decision of state.decisions) if (decision.decisionOwnerId === user.id) ids.add(decision.nodeId);
+  for (const blocker of state.blockers) if (blocker.ownerId === user.id || blocker.escalationToId === user.id) ids.add(blocker.nodeId);
+  for (const acceptance of state.acceptances) if (acceptance.submittedBy === user.id || acceptance.acceptorId === user.id) ids.add(acceptance.nodeId);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const node of state.nodes) {
+      if (node.parentId && scopeRoots.has(node.parentId) && !scopeRoots.has(node.id)) { scopeRoots.add(node.id); ids.add(node.id); changed = true; }
+      if (ids.has(node.id) && node.parentId && !ids.has(node.parentId)) { ids.add(node.parentId); changed = true; }
+    }
+  }
+  return ids;
+}
+
+function stateForUser(state: PortalState, user: SessionUser): PortalState {
+  const ids = visibleNodeIds(state, user);
+  const blockers = state.blockers.filter((item) => ids.has(item.nodeId));
+  const decisions = state.decisions.filter((item) => ids.has(item.nodeId));
+  const blockerIds = new Set(blockers.map((item) => item.id));
+  const decisionIds = new Set(decisions.map((item) => item.id));
+  return {
+    ...state,
+    nodes: state.nodes.filter((node) => ids.has(node.id)),
+    dependencies: state.dependencies.filter((item) => ids.has(item.predecessorId) && ids.has(item.successorId)),
+    blockers,
+    decisions,
+    acceptances: state.acceptances.filter((item) => ids.has(item.nodeId)),
+    coordinations: state.coordinations.filter((item) => ids.has(item.cycleId || item.subcycleId)).map((item) => ({ ...item, taskState: item.taskState.filter((task) => ids.has(task.nodeId)), blockerIds: item.blockerIds.filter((id) => blockerIds.has(id)), decisionIds: item.decisionIds.filter((id) => decisionIds.has(id)) })),
+    discussions: (state.discussions || []).filter((item) => ids.has(item.nodeId)),
+    notifications: (state.notifications || []).filter((item) => item.userId === user.id),
+    audit: state.audit.filter((item) => item.entityId === "portal" || ids.has(item.entityId)),
+  };
+}
+
+function mergeHiddenState(current: PortalState, submitted: PortalState, user: SessionUser): PortalState {
+  if (["owner", "admin"].includes(user.role)) return { ...submitted, notifications: [...(current.notifications || []).filter((item) => item.userId !== user.id), ...(submitted.notifications || [])] };
+  const visible = visibleNodeIds(current, user);
+  const hiddenByNode = <T extends { nodeId: string }>(items: T[]) => items.filter((item) => !visible.has(item.nodeId));
+  const hiddenBlockerIds = new Set(current.blockers.filter((item) => !visible.has(item.nodeId)).map((item) => item.id));
+  const hiddenDecisionIds = new Set(current.decisions.filter((item) => !visible.has(item.nodeId)).map((item) => item.id));
+  const submittedCoordinations = submitted.coordinations.map((item) => {
+    const before = current.coordinations.find((candidate) => candidate.id === item.id);
+    if (!before) return item;
+    return { ...item, taskState: [...before.taskState.filter((task) => !visible.has(task.nodeId)), ...item.taskState], blockerIds: [...before.blockerIds.filter((id) => hiddenBlockerIds.has(id)), ...item.blockerIds], decisionIds: [...before.decisionIds.filter((id) => hiddenDecisionIds.has(id)), ...item.decisionIds] };
+  });
+  return {
+    ...submitted,
+    nodes: [...current.nodes.filter((node) => !visible.has(node.id)), ...submitted.nodes],
+    dependencies: [...current.dependencies.filter((item) => !visible.has(item.predecessorId) || !visible.has(item.successorId)), ...submitted.dependencies],
+    blockers: [...hiddenByNode(current.blockers), ...submitted.blockers],
+    decisions: [...hiddenByNode(current.decisions), ...submitted.decisions],
+    acceptances: [...hiddenByNode(current.acceptances), ...submitted.acceptances],
+    coordinations: [...current.coordinations.filter((item) => !visible.has(item.cycleId || item.subcycleId)), ...submittedCoordinations],
+    discussions: [...hiddenByNode(current.discussions || []), ...(submitted.discussions || [])],
+    notifications: [...(current.notifications || []).filter((item) => item.userId !== user.id), ...(submitted.notifications || [])],
+    audit: current.audit,
+  };
+}
 
 export async function GET(request: Request) {
   const { state, storage } = await loadState();
@@ -10,7 +79,7 @@ export async function GET(request: Request) {
   if (!user) return jsonError("Потрібен вхід за корпоративною адресою", 401);
   return Response.json(
     {
-      ...state,
+      ...stateForUser(state, user),
       currentUser: user,
       storage,
       authConfigured: Boolean(runtimeEnv().PORTAL_OWNER_CREDENTIAL || runtimeEnv().GOOGLE_CLIENT_ID),
@@ -28,6 +97,7 @@ export async function POST(request: Request) {
   if (!body.state || !Array.isArray(body.state.nodes) || !Array.isArray(body.state.users)) {
     return jsonError("Некоректна структура стану", 400);
   }
+  body.state = mergeHiddenState(current, body.state, user);
   if (JSON.stringify(body.state.users) !== JSON.stringify(current.users)) {
     return jsonError("Користувачі та права змінюються лише в налаштуваннях порталу", 403);
   }
@@ -50,8 +120,8 @@ export async function POST(request: Request) {
     if (!after) return jsonError("Записи не видаляються фізично — використайте контрольоване вилучення з дерева", 400);
     const mayCreate = !before && ["owner", "admin", "goal_owner", "cycle_owner", "coordinator"].includes(user.role);
     const resolvesDecision = [...current.decisions, ...body.state.decisions].some((decision) => decision.nodeId === id && decision.decisionOwnerId === user.id);
-    const approvesBlocker = [...current.blockers, ...body.state.blockers].some((blocker) => blocker.nodeId === id && blocker.escalationToId === user.id);
-    const mayChange = before && (mayEdit(user, before.ownerId) || before.assigneeId === user.id || before.acceptorId === user.id || resolvesDecision || approvesBlocker);
+    const managesBlocker = [...current.blockers, ...body.state.blockers].some((blocker) => blocker.nodeId === id && (blocker.escalationToId === user.id || blocker.ownerId === user.id));
+    const mayChange = before && (mayEdit(user, before.ownerId) || before.assigneeId === user.id || before.acceptorId === user.id || resolvesDecision || managesBlocker);
     if (!mayCreate && !mayChange) return jsonError("Недостатньо повноважень для однієї зі змін", 403);
   }
 
@@ -99,8 +169,8 @@ export async function POST(request: Request) {
   for (const id of affectedNodeIds) {
     const node = current.nodes.find((candidate) => candidate.id === id) || body.state.nodes.find((candidate) => candidate.id === id);
     const decides = [...current.decisions, ...body.state.decisions].some((decision) => decision.nodeId === id && decision.decisionOwnerId === user.id);
-    const approvesBlocker = [...current.blockers, ...body.state.blockers].some((blocker) => blocker.nodeId === id && blocker.escalationToId === user.id);
-    if (!node || !(mayEdit(user, node.ownerId) || node.assigneeId === user.id || node.acceptorId === user.id || decides || approvesBlocker)) {
+    const managesBlocker = [...current.blockers, ...body.state.blockers].some((blocker) => blocker.nodeId === id && (blocker.escalationToId === user.id || blocker.ownerId === user.id));
+    if (!node || !(mayEdit(user, node.ownerId) || node.assigneeId === user.id || node.acceptorId === user.id || decides || managesBlocker)) {
       return jsonError("Недостатньо повноважень для пов’язаної зміни", 403);
     }
   }
@@ -143,7 +213,7 @@ export async function POST(request: Request) {
       const before = current.blockers.find((item) => item.id === blocker.id);
       const node = next.nodes.find((candidate) => candidate.id === blocker.nodeId);
       if (!before) addNotification(blocker.escalationToId, blocker.nodeId, "blocker", `Потрібна реакція на блокер · ${node?.code || "картка"}`, blocker.title);
-      else if (before.approvalStatus !== blocker.approvalStatus) addNotification(blocker.ownerId, blocker.nodeId, "blocker", blocker.approvalStatus === "approved" ? `Реакцію на блокер погоджено · ${node?.code || "картка"}` : `Реакцію на блокер повернуто · ${node?.code || "картка"}`, blocker.approvalComment || blocker.title);
+      else if (before.approvalStatus !== blocker.approvalStatus) addNotification(blocker.ownerId, blocker.nodeId, "blocker", blocker.approvalStatus === "approved" ? `Статус блокера погоджено · ${node?.code || "картка"}` : `У статусі блокера відмовлено · ${node?.code || "картка"}`, blocker.approvalComment || blocker.title);
     }
     for (const acceptance of next.acceptances) {
       const before = current.acceptances.find((item) => item.id === acceptance.id);
@@ -231,5 +301,5 @@ export async function POST(request: Request) {
     }
   }
 
-  return Response.json({ ...next, currentUser: user, storage, authConfigured: Boolean(runtimeEnv().PORTAL_OWNER_CREDENTIAL || runtimeEnv().GOOGLE_CLIENT_ID) });
+  return Response.json({ ...stateForUser(next, user), currentUser: user, storage, authConfigured: Boolean(runtimeEnv().PORTAL_OWNER_CREDENTIAL || runtimeEnv().GOOGLE_CLIENT_ID) });
 }

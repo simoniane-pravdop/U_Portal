@@ -84,7 +84,10 @@ test("durable storage and integration bindings are declared", async () => {
   assert.match(stateRoute, /next\.notifications\.unshift/);
   assert.match(stateRoute, /startsWith\("Сповіщення"\)/);
   assert.match(stateRoute, /addNotification\(node\?\.ownerId, acceptance\.nodeId, "acceptance"/);
-  assert.match(stateRoute, /approvesBlocker/);
+  assert.match(stateRoute, /managesBlocker/);
+  assert.match(stateRoute, /stateForUser/);
+  assert.match(stateRoute, /mergeHiddenState/);
+  assert.match(stateRoute, /node\.visibility === "company"/);
 });
 
 test("management workflow separates structure, work, dashboard, settings, and access", async () => {
@@ -113,6 +116,9 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /startOn: selected\.plannedStart/);
   assert.match(source, /Паспорт робочої картки/);
   assert.match(source, /work-card-description/);
+  assert.match(source, /work-card-sections/);
+  assert.match(source, /work-card-menu/);
+  assert.match(source, /OpenBlockersPanel/);
   assert.match(source, /Є ризик виконання/);
   assert.match(source, /completionBlockReason/);
   assert.match(source, /window\.history\.pushState/);
@@ -121,6 +127,9 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /pravdop-logo\.png/);
   assert.match(source, /sidebarCollapsed/);
   assert.match(source, /Розгорнути бічне меню/);
+  assert.match(source, /sidebar-account/);
+  assert.match(source, /mobile-more-nav/);
+  assert.doesNotMatch(source, /<header className="topbar">/);
   assert.match(source, /Підключити Telegram/);
   assert.match(source, /recalculateHierarchy/);
   assert.match(source, /tree-row-menu/);
@@ -153,25 +162,35 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /Прийняття рішення/);
   assert.match(source, /Приймання завершення завдання/);
   assert.match(source, /Погодження блокера/);
+  assert.match(source, /Підтвердження статусу блокера/);
+  assert.match(source, /Відмовлено/);
+  assert.match(source, /Погоджую/);
   assert.match(source, /return submitAcceptance\(live, live\.acceptorId/);
   assert.match(source, /target\.lifecycle = "acceptance"/);
   assert.match(source, /node\.progress = 100/);
   assert.doesNotMatch(source, /Погодити закриття/);
+  assert.match(source, /Asana підтвердила завершення пов’язаної задачі/);
+  assert.match(source, /node\.lifecycle = "acceptance"/);
+  assert.doesNotMatch(source, /task\.completed \? "completed" : node\.lifecycle/);
   assert.match(source, /Учасники \/ фоловери/);
   assert.match(source, /Завершено в Asana/);
   assert.match(source, /Перепідключити акаунт/);
   assert.match(source, /Відключити акаунт/);
   assert.match(source, /Шлях координації/);
   assert.match(source, /Координація циклу \$\{node\.code\}: \$\{node\.title\}/);
-  assert.match(source, /Рівень управління/);
-  assert.match(source, /Усі цілі/);
-  assert.match(source, /Усі цикли/);
-  assert.match(source, /Усі підцикли/);
-  assert.match(source, /Усі завдання/);
+  assert.match(source, /Рівень, статус і стан/);
+  assert.match(source, /value="goal">Цілі/);
+  assert.match(source, /value="cycle">Цикли/);
+  assert.match(source, /value="subcycle">Підцикли/);
+  assert.match(source, /value="task">Завдання/);
   assert.doesNotMatch(source, /Обрати картку/);
   assert.match(source, /work-advanced-filters/);
   assert.match(source, /Скинути фільтри/);
   assert.match(source, /Редагувати картку/);
+  assert.match(source, /Особисті підключення доступні кожному користувачу/);
+  assert.match(source, /Конкретні задачі прив’язуються в «Моїй роботі»/);
+  assert.match(source, /portal:work-draft:\$\{currentUserId\}/);
+  assert.doesNotMatch(source, /<tr key=\{node\.id\} onClick/);
   assert.match(source, /Координатор/);
   assert.match(source, /Керівник вищої ланки/);
   assert.match(source, /branchHasOpenBlocker/);
@@ -238,6 +257,7 @@ test("password authentication uses slow hashing, rate limiting, and no committed
 test("compact laptop and mobile layouts are declared", async () => {
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
   assert.match(css, /@media \(max-width: 1366px\)/);
+  assert.match(css, /@media \(max-width: 1024px\)/);
   assert.match(css, /@media \(max-width: 760px\)/);
   assert.match(css, /@media \(max-width: 520px\)/);
   assert.match(css, /\.tree-workbench\.compact-tree/);
@@ -250,6 +270,10 @@ test("compact laptop and mobile layouts are declared", async () => {
   assert.match(css, /\.asana-work \.asana-create-form/);
   assert.match(css, /\.work-card-description/);
   assert.match(css, /\.work-card-description-body/);
+  assert.match(css, /\.mobile-more-nav/);
+  assert.match(css, /\.work-card-sections/);
+  assert.match(css, /\.approve-blocker/);
+  assert.match(css, /\.reject-blocker/);
   assert.match(css, /grid-template-columns: minmax\(0, 1fr\); align-items: stretch/);
   assert.match(css, /minmax\(370px, \.72fr\)/);
   assert.match(css, /\.tree-workbench\.mobile-pane-tree \.node-detail/);
