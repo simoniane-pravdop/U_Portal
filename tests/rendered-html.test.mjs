@@ -148,6 +148,13 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /work-advanced-filters/);
   assert.match(source, /Скинути фільтри/);
   assert.match(source, /Редагувати картку/);
+  assert.match(source, /Координатор/);
+  assert.match(source, /Керівник вищої ланки/);
+  assert.match(source, /branchHasOpenBlocker/);
+  assert.match(source, /filter === "manage".*branchHasOpenBlocker/);
+  assert.match(source, /filter === "acceptance"/);
+  assert.match(source, /item === "acceptance" \? "Приймаю"/);
+  assert.doesNotMatch(source, /Власник результату|Приймає результат/);
   assert.doesNotMatch(source, /Робочий контур/);
   assert.match(source, /Координація за управлінськими циклами/);
   assert.match(source, /Предмет координації — зведений стан усіх завдань циклу/);
