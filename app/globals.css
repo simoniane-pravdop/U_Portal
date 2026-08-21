@@ -487,7 +487,7 @@ tbody tr:hover { background: #f8fafc; }
 .work-summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 14px 22px 0; }
 .work-summary-grid article { padding: 10px; border: 1px solid var(--line-soft); border-radius: 8px; background: #fafcfd; }
 .work-summary-grid article > span { display: block; margin-bottom: 7px; color: var(--muted); font-size: 7px; font-weight: 850; text-transform: uppercase; }
-.execution-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(290px, .65fr); gap: 11px; padding: 14px 22px 25px; align-items: start; }
+.execution-grid { display: grid; grid-template-columns: minmax(0, 1.28fr) minmax(370px, .72fr); gap: 11px; padding: 14px 22px 25px; align-items: start; }
 .work-section { margin-bottom: 11px; padding: 15px; border: 1px solid var(--line-soft); border-radius: 10px; background: #fff; }
 .work-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .work-section-head span { color: var(--gold); font-size: 7px; font-weight: 900; text-transform: uppercase; }
@@ -525,6 +525,8 @@ tbody tr:hover { background: #f8fafc; }
 .acceptance-box.detailed > div:last-child { justify-content: flex-end; }
 .asana-work { padding: 0 0 13px; overflow: hidden; }
 .asana-work .panel-head { min-height: 60px; }
+.asana-work .panel-head > div { min-width: 0; }
+.asana-work .panel-head h2 { overflow-wrap: anywhere; }
 .asana-work .sync-grid { grid-template-columns: 1fr; padding: 12px 14px 8px; }
 .asana-work .sync-actions { display: grid; grid-template-columns: 1fr; padding: 0 14px; }
 .asana-work .sync-note { margin: 10px 14px 0; }
@@ -536,6 +538,9 @@ tbody tr:hover { background: #f8fafc; }
 .asana-link-stack { display: grid; gap: 8px; padding: 4px 14px 8px; }
 .asana-link-form, .asana-create-form, .asana-search-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; }
 .asana-create-form { padding: 4px 14px 8px; }
+.asana-work .asana-link-form, .asana-work .asana-create-form, .asana-work .asana-search-form { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
+.asana-work .asana-link-form > button, .asana-work .asana-create-form > button, .asana-work .asana-search-form > button { width: 100%; }
+.asana-work .asana-create-form > div { min-width: 0; overflow-wrap: anywhere; }
 .asana-link-form label, .asana-create-form label, .asana-search-form label { display: grid; gap: 5px; }
 .asana-link-form label span, .asana-create-form label span, .asana-search-form label span, .asana-create-form > div > span, .asana-linked-card span { color: var(--muted); font-size: 8px; font-weight: 800; text-transform: uppercase; }
 .asana-link-form input, .asana-create-form input, .asana-create-form select, .asana-search-form input { width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid #cbd5df; border-radius: 7px; background: #fff; font-size: 10px; }

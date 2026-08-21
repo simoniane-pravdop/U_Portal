@@ -239,6 +239,9 @@ test("compact laptop and mobile layouts are declared", async () => {
   assert.match(css, /\.calendar-grid/);
   assert.match(css, /\.manager-action-center/);
   assert.match(css, /\.blocker-approval-card/);
+  assert.match(css, /\.asana-work \.asana-create-form/);
+  assert.match(css, /grid-template-columns: minmax\(0, 1fr\); align-items: stretch/);
+  assert.match(css, /minmax\(370px, \.72fr\)/);
   assert.match(css, /\.tree-workbench\.mobile-pane-tree \.node-detail/);
   assert.match(css, /position: fixed; z-index: 90; top: auto; right: 0; bottom: 0/);
   assert.match(css, /\.coordination-card footer button\.primary/);
