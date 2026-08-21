@@ -860,6 +860,17 @@ tbody tr:hover { background: #f8fafc; }
 .catalog-head input { padding: 7px 8px; font-size: 9px; }
 .catalog-head span { min-width: 23px; height: 23px; font-size: 8px; }
 .tree-scroll { height: calc(100% - 43px); padding: 5px 4px 14px; }
+.tree-scroll.flat-filter-results { padding-inline: 6px; }
+.tree-filter-result { padding: 4px 0 6px; border-bottom: 1px solid var(--line-soft); }
+.tree-filter-path { min-height: 21px; display: flex; align-items: center; gap: 3px; margin: 0 3px 2px 23px; padding: 3px 6px; overflow-x: auto; border-radius: 5px; background: #f1f5f8; white-space: nowrap; }
+.tree-filter-path span { display: inline-flex; align-items: center; gap: 3px; }
+.tree-filter-path button { padding: 1px 3px; border: 0; border-radius: 3px; color: var(--navy-700); background: transparent; font: 800 7px Georgia, serif; }
+.tree-filter-path button:hover, .tree-filter-path button:focus-visible { color: #fff; outline: 0; background: var(--navy-700); }
+.tree-filter-path i { color: var(--gold); font-size: 7px; font-style: normal; }
+.tree-filter-path small { color: var(--muted); font-size: 6px; }
+.tree-flat-row { padding-left: 2px; }
+.tree-flat-marker { display: grid; place-items: center; color: #94a3b3; font-size: 12px; }
+.tree-flat-row.selected .tree-flat-marker { color: #fff; }
 .tree-row { min-height: 33px; grid-template-columns: 20px minmax(0, 1fr) auto; padding-top: 2px; padding-right: 3px; padding-bottom: 2px; border-radius: 5px; }
 .tree-row .tree-toggle { width: 19px; height: 24px; font-size: 14px; }
 .tree-row-main { grid-template-columns: 47px minmax(0, 1fr) auto; gap: 4px; padding: 5px 2px; }
@@ -872,6 +883,8 @@ tbody tr:hover { background: #f8fafc; }
 .compact-tree .tree-row { grid-template-columns: 15px minmax(0, 1fr); padding-left: 1px !important; padding-right: 1px; }
 .compact-tree .tree-row-main { grid-template-columns: 1fr; padding-inline: 1px; text-align: center; }
 .compact-tree .tree-name, .compact-tree .health-badge, .compact-tree .tree-row-menu { display: none; }
+.compact-tree .tree-filter-path { display: none; }
+.compact-tree .tree-filter-result { padding-block: 2px; }
 .compact-tree .tree-code { overflow: hidden; font-size: 8px; text-overflow: ellipsis; }
 .compact-tree .tree-row .tree-toggle { width: 14px; }
 .tree-row-menu { position: relative; align-self: center; }

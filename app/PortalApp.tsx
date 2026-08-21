@@ -1004,13 +1004,18 @@ function TreeView(props: {
   const [stateFilter, setStateFilter] = useState<"all" | "active" | "risk" | "completed">("all");
   const active = payload.nodes.filter((node) => !node.archived);
   const query = search.trim().toLowerCase();
-  const visibleIds = new Set<string>();
-  for (const node of active) {
+  const matchesFilters = (node: WorkNode) => {
     const matchesQuery = !query || `${node.code} ${node.title} ${node.result}`.toLowerCase().includes(query);
     const matchesKind = kindFilter === "all" || node.kind === kindFilter;
     const matchesOwner = ownerFilter === "all" || node.ownerId === ownerFilter || node.assigneeId === ownerFilter;
     const matchesState = stateFilter === "all" || stateFilter === "active" && !["completed", "cancelled"].includes(node.lifecycle) || stateFilter === "risk" && node.health !== "normal" || stateFilter === "completed" && node.lifecycle === "completed";
-    if (matchesQuery && matchesKind && matchesOwner && matchesState) {
+    return matchesQuery && matchesKind && matchesOwner && matchesState;
+  };
+  const directMatches = active.filter(matchesFilters);
+  const flatLevelResults = kindFilter !== "all";
+  const visibleIds = new Set<string>();
+  for (const node of directMatches) {
+    if (!flatLevelResults) {
       visibleIds.add(node.id);
       let parentId = node.parentId;
       while (parentId) {
@@ -1019,7 +1024,7 @@ function TreeView(props: {
       }
     }
   }
-  const filtered = active.filter((node) => visibleIds.has(node.id));
+  const filtered = flatLevelResults ? directMatches : active.filter((node) => visibleIds.has(node.id));
   const predecessors = selected ? payload.dependencies.filter((item) => item.successorId === selected.id).map((item) => payload.nodes.find((node) => node.id === item.predecessorId)).filter(Boolean) as WorkNode[] : [];
   const children = selected ? payload.nodes.filter((node) => node.parentId === selected.id && !node.archived) : [];
   const canEditSelected = Boolean(selected && (canManage || selected.ownerId === payload.currentUser.id));
@@ -1069,6 +1074,15 @@ function TreeView(props: {
       {hasChildren && expanded.has(node.id) && renderBranch(node.id, depth + 1)}
     </div>;
   });
+  const openTreeCard = (nodeId: string) => { setSelectedId(nodeId); setDetailTab("passport"); setMobilePane("card"); };
+  const renderFlatResult = (node: WorkNode) => {
+    const path = nodePath(payload.nodes, node).slice(0, -1);
+    const lock = locks.find((item) => item.entityId === node.id && item.userId !== payload.currentUser.id);
+    return <div className="tree-filter-result" key={node.id}>
+      <nav className="tree-filter-path" aria-label={`Шлях до ${node.code}`}>{path.length ? path.map((ancestor, index) => <span key={ancestor.id}><button title={`${kindLabels[ancestor.kind]} · ${ancestor.code} · ${ancestor.title}`} onClick={() => openTreeCard(ancestor.id)}>{ancestor.code}</button>{index < path.length - 1 && <i>/</i>}</span>) : <small>Верхній рівень</small>}</nav>
+      <div className={`tree-row tree-flat-row ${node.id === selectedId ? "selected" : ""} kind-${node.kind}`}><span className="tree-flat-marker">·</span><button className="tree-row-main" onClick={() => openTreeCard(node.id)} title={`${kindLabels[node.kind]} · ${node.code} · ${node.title}`}><span className="tree-code">{node.code}</span><span className="tree-name">{node.title}</span>{lock && <span className="editing-badge" title={`${lock.userName} редагує картку`}>✎ {lock.userName}</span>}<StatusBadge node={node} /></button></div>
+    </div>;
+  };
 
   return <>
     <PageIntro kicker="Структура управління" title="Дерево цілей, циклів і завдань" text="Тут створюється структура та зберігаються паспорти. Виконання й звіти ведуться у «Моїй роботі»." actions={canManage && <details className="create-uo-menu"><summary>+ Створити</summary><div>{(["goal", "cycle", "subcycle", "task"] as NodeKind[]).map((kind) => <button key={kind} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); openCreateKind(kind, selected); }}><span>{kind === "goal" ? "S" : kind === "cycle" ? "P" : kind === "subcycle" ? "P.x" : "✓"}</span>{kindLabels[kind]}</button>)}</div></details>} />
@@ -1077,7 +1091,7 @@ function TreeView(props: {
       <aside className="tree-catalog">
         <div className="catalog-head">{!treeCompact && <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Пошук у дереві…" />}<span>{filtered.length}</span><button className="tree-compact-toggle" onClick={() => setTreeCompact((value) => !value)} title={treeCompact ? "Розгорнути дерево" : "Згорнути дерево до кодів"} aria-label={treeCompact ? "Розгорнути дерево" : "Згорнути дерево до кодів"}>{treeCompact ? "→" : "К"}</button></div>
         {!treeCompact && <div className="compact-filters"><select value={kindFilter} onChange={(event) => setKindFilter(event.target.value as "all" | NodeKind)}><option value="all">Усі рівні</option><option value="goal">Цілі</option><option value="cycle">Цикли</option><option value="subcycle">Підцикли</option><option value="task">Завдання</option></select><select value={ownerFilter} onChange={(event) => setOwnerFilter(event.target.value)}><option value="all">Усі відповідальні</option>{payload.users.filter((user) => user.active).map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select><select value={stateFilter} onChange={(event) => setStateFilter(event.target.value as typeof stateFilter)}><option value="all">Усі стани</option><option value="active">Активні</option><option value="risk">Ризик / блокер</option><option value="completed">Завершені</option></select></div>}
-        <div className="tree-scroll">{renderBranch(null)}{!filtered.length && <p className="empty-state padded">Дерево порожнє. Створіть першу стратегічну ціль.</p>}</div>
+        <div className={`tree-scroll ${flatLevelResults ? "flat-filter-results" : ""}`}>{flatLevelResults ? filtered.map(renderFlatResult) : renderBranch(null)}{!filtered.length && <p className="empty-state padded">{flatLevelResults ? "За вибраними фільтрами об’єктів цього рівня немає." : "Дерево порожнє. Створіть першу стратегічну ціль."}</p>}</div>
         {!treeCompact && <button type="button" className="tree-width-handle" aria-label={`Змінити ширину навігації дерева, зараз ${treeWidth} пікселів`} title="Перетягніть для зміни ширини · стрілки — крок 20 пікселів · подвійне натискання — стандартна ширина" onPointerDown={startTreeResize} onKeyDown={(event) => { if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return; event.preventDefault(); const next = Math.max(220, Math.min(560, treeWidth + (event.key === "ArrowRight" ? 20 : -20))); setTreeWidth(next); window.localStorage.setItem("portal:tree-navigation-width", String(next)); }} onDoubleClick={() => { setTreeWidth(300); window.localStorage.setItem("portal:tree-navigation-width", "300"); }} />}
       </aside>
       {selected ? <section className="node-detail">

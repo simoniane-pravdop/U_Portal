@@ -118,6 +118,10 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /compact-tree/);
   assert.match(source, /tree-width-handle/);
   assert.match(source, /portal:tree-navigation-width/);
+  assert.match(source, /flatLevelResults \? directMatches/);
+  assert.match(source, /tree-filter-path/);
+  assert.match(source, /Шлях до \$\{node\.code\}/);
+  assert.match(source, /kindLabels\[ancestor\.kind\].*ancestor\.title/);
   assert.match(source, /return \["cycle", "subcycle"\]/);
   assert.match(source, /Додати завдання/);
   assert.match(source, /Завдання можна включити безпосередньо в управлінський цикл або в його підцикл/);
@@ -198,6 +202,7 @@ test("compact laptop and mobile layouts are declared", async () => {
   assert.match(css, /@media \(max-width: 520px\)/);
   assert.match(css, /\.tree-workbench\.compact-tree/);
   assert.match(css, /--tree-nav-width/);
+  assert.match(css, /\.tree-filter-path/);
   assert.match(css, /\.coordination-tree-table/);
   assert.match(css, /\.calendar-grid/);
   assert.match(css, /\.tree-workbench\.mobile-pane-tree \.node-detail/);
