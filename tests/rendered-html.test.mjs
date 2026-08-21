@@ -152,8 +152,10 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /Керівник вищої ланки/);
   assert.match(source, /branchHasOpenBlocker/);
   assert.match(source, /item\.health === "blocked" \|\| item\.health === "risk"/);
-  assert.match(source, /filter === "manage".*branchHasOpenBlocker/);
+  assert.match(source, /filter === "manage" && node\.ownerId === payload\.currentUser\.id/);
   assert.match(source, /filter === "acceptance"/);
+  assert.match(source, /workHealthFilter === "branch_blocker" \? branchHasOpenBlocker/);
+  assert.match(source, /value="branch_blocker">Блокери/);
   assert.match(source, /filtered\.some\(\(node\) => node\.id === selectedNode\.id\)/);
   assert.match(source, /За вибраним фільтром карток немає/);
   assert.match(source, /item === "acceptance" \? "Приймаю"/);
