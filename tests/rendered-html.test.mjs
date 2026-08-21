@@ -151,8 +151,11 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /Координатор/);
   assert.match(source, /Керівник вищої ланки/);
   assert.match(source, /branchHasOpenBlocker/);
+  assert.match(source, /item\.health === "blocked" \|\| item\.health === "risk"/);
   assert.match(source, /filter === "manage".*branchHasOpenBlocker/);
   assert.match(source, /filter === "acceptance"/);
+  assert.match(source, /filtered\.some\(\(node\) => node\.id === selectedNode\.id\)/);
+  assert.match(source, /За вибраним фільтром карток немає/);
   assert.match(source, /item === "acceptance" \? "Приймаю"/);
   assert.doesNotMatch(source, /Власник результату|Приймає результат/);
   assert.doesNotMatch(source, /Робочий контур/);
