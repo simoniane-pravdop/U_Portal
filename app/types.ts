@@ -140,6 +140,10 @@ export type Blocker = {
   status: "open" | "resolved";
   createdAt: string;
   resolvedAt: string;
+  approvalStatus?: "pending" | "approved" | "returned";
+  approvalComment?: string;
+  approvedBy?: string;
+  approvedAt?: string;
 };
 
 export type Decision = {
@@ -232,7 +236,7 @@ export type PortalNotification = {
   userId: string;
   actorId: string;
   nodeId: string;
-  type: "delegation" | "question" | "decision" | "acceptance" | "comment" | "created" | "updated" | "completed";
+  type: "delegation" | "blocker" | "question" | "decision" | "acceptance" | "comment" | "created" | "updated" | "completed";
   title: string;
   detail: string;
   createdAt: string;

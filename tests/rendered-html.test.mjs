@@ -82,6 +82,8 @@ test("durable storage and integration bindings are declared", async () => {
   const stateRoute = await readFile(new URL("../app/api/state/route.ts", import.meta.url), "utf8");
   assert.match(stateRoute, /next\.notifications\.unshift/);
   assert.match(stateRoute, /startsWith\("Сповіщення"\)/);
+  assert.match(stateRoute, /addNotification\(node\?\.ownerId, acceptance\.nodeId, "acceptance"/);
+  assert.match(stateRoute, /approvesBlocker/);
 });
 
 test("management workflow separates structure, work, dashboard, settings, and access", async () => {
@@ -134,10 +136,19 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /deletedAt/);
   assert.match(source, /editedAt/);
   assert.match(source, /Вхідні та сповіщення/);
+  assert.match(source, /manager-actions-\$\{node\.id\}/);
+  assert.match(source, /discussion-\$\{node\.id\}/);
+  assert.match(source, /scrollIntoView\(\{ behavior: "smooth", block: "start" \}\)/);
   assert.match(source, /Повернути з коментарем/);
   assert.match(source, /Зафіксувати інше рішення/);
   assert.match(source, /Прийняте рішення/);
   assert.match(source, /Прийняття рішення/);
+  assert.match(source, /Приймання завершення завдання/);
+  assert.match(source, /Погодження блокера/);
+  assert.match(source, /return submitAcceptance\(live, live\.acceptorId/);
+  assert.match(source, /target\.lifecycle = "acceptance"/);
+  assert.match(source, /node\.progress = 100/);
+  assert.doesNotMatch(source, /Погодити закриття/);
   assert.match(source, /Учасники \/ фоловери/);
   assert.match(source, /Завершено в Asana/);
   assert.match(source, /Перепідключити акаунт/);
@@ -226,6 +237,8 @@ test("compact laptop and mobile layouts are declared", async () => {
   assert.match(css, /\.tree-filter-path/);
   assert.match(css, /\.coordination-tree-table/);
   assert.match(css, /\.calendar-grid/);
+  assert.match(css, /\.manager-action-center/);
+  assert.match(css, /\.blocker-approval-card/);
   assert.match(css, /\.tree-workbench\.mobile-pane-tree \.node-detail/);
   assert.match(css, /position: fixed; z-index: 90; top: auto; right: 0; bottom: 0/);
   assert.match(css, /\.coordination-card footer button\.primary/);

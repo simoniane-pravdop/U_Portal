@@ -49,7 +49,9 @@ export async function POST(request: Request) {
     const after = body.state.nodes.find((node) => node.id === id);
     if (!after) return jsonError("Записи не видаляються фізично — використайте контрольоване вилучення з дерева", 400);
     const mayCreate = !before && ["owner", "admin", "goal_owner", "cycle_owner", "coordinator"].includes(user.role);
-    const mayChange = before && (mayEdit(user, before.ownerId) || before.assigneeId === user.id || before.acceptorId === user.id);
+    const resolvesDecision = [...current.decisions, ...body.state.decisions].some((decision) => decision.nodeId === id && decision.decisionOwnerId === user.id);
+    const approvesBlocker = [...current.blockers, ...body.state.blockers].some((blocker) => blocker.nodeId === id && blocker.escalationToId === user.id);
+    const mayChange = before && (mayEdit(user, before.ownerId) || before.assigneeId === user.id || before.acceptorId === user.id || resolvesDecision || approvesBlocker);
     if (!mayCreate && !mayChange) return jsonError("Недостатньо повноважень для однієї зі змін", 403);
   }
 
@@ -97,7 +99,8 @@ export async function POST(request: Request) {
   for (const id of affectedNodeIds) {
     const node = current.nodes.find((candidate) => candidate.id === id) || body.state.nodes.find((candidate) => candidate.id === id);
     const decides = [...current.decisions, ...body.state.decisions].some((decision) => decision.nodeId === id && decision.decisionOwnerId === user.id);
-    if (!node || !(mayEdit(user, node.ownerId) || node.assigneeId === user.id || node.acceptorId === user.id || decides)) {
+    const approvesBlocker = [...current.blockers, ...body.state.blockers].some((blocker) => blocker.nodeId === id && blocker.escalationToId === user.id);
+    if (!node || !(mayEdit(user, node.ownerId) || node.assigneeId === user.id || node.acceptorId === user.id || decides || approvesBlocker)) {
       return jsonError("Недостатньо повноважень для пов’язаної зміни", 403);
     }
   }
@@ -136,10 +139,19 @@ export async function POST(request: Request) {
       const title = message.kind === "question" ? `Нове питання · ${node?.code || "картка"}` : message.kind === "decision" ? `Запит рішення · ${node?.code || "картка"}` : message.kind === "approval" ? `Погодження · ${node?.code || "картка"}` : `Новий коментар · ${node?.code || "картка"}`;
       for (const recipientId of recipients) addNotification(recipientId, message.nodeId, type, title, message.text);
     }
+    for (const blocker of next.blockers) {
+      const before = current.blockers.find((item) => item.id === blocker.id);
+      const node = next.nodes.find((candidate) => candidate.id === blocker.nodeId);
+      if (!before) addNotification(blocker.escalationToId, blocker.nodeId, "blocker", `Потрібна реакція на блокер · ${node?.code || "картка"}`, blocker.title);
+      else if (before.approvalStatus !== blocker.approvalStatus) addNotification(blocker.ownerId, blocker.nodeId, "blocker", blocker.approvalStatus === "approved" ? `Реакцію на блокер погоджено · ${node?.code || "картка"}` : `Реакцію на блокер повернуто · ${node?.code || "картка"}`, blocker.approvalComment || blocker.title);
+    }
     for (const acceptance of next.acceptances) {
       const before = current.acceptances.find((item) => item.id === acceptance.id);
       const node = next.nodes.find((candidate) => candidate.id === acceptance.nodeId);
-      if (!before) addNotification(acceptance.acceptorId, acceptance.nodeId, "acceptance", `Результат очікує приймання · ${node?.code || "картка"}`, node?.title || acceptance.evidenceNote);
+      if (!before) {
+        addNotification(acceptance.acceptorId, acceptance.nodeId, "acceptance", `Результат очікує приймання · ${node?.code || "картка"}`, node?.title || acceptance.evidenceNote);
+        addNotification(node?.ownerId, acceptance.nodeId, "acceptance", `Завдання передано на приймання · ${node?.code || "картка"}`, `${node?.title || acceptance.evidenceNote}. Приймання виконує керівник вищої ланки.`);
+      }
       else if (before.status !== acceptance.status) addNotification(acceptance.submittedBy, acceptance.nodeId, "acceptance", acceptance.status === "accepted" ? `Результат прийнято · ${node?.code || "картка"}` : `Результат повернуто · ${node?.code || "картка"}`, acceptance.feedback);
     }
     for (const decision of next.decisions) {
