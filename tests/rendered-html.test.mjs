@@ -233,6 +233,10 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.doesNotMatch(source, /Власник результату|Приймає результат/);
   assert.doesNotMatch(source, /Робочий контур/);
   assert.match(source, /Координація за управлінськими циклами/);
+  assert.match(source, /coordination-filter-bar/);
+  assert.match(source, /useState<"all" \| NodeKind>\("all"\)/);
+  assert.match(source, /level === "all" \|\| node\.kind === level/);
+  assert.match(source, /Пошук цілі, циклу, підциклу або завдання/);
   assert.match(source, /Предмет координації — зведений стан усіх завдань циклу/);
   assert.match(source, /Потребує координації/);
   assert.match(source, /matchesExecutorAndState/);
@@ -305,6 +309,7 @@ test("compact laptop and mobile layouts are declared", async () => {
   assert.match(css, /--tree-nav-width/);
   assert.match(css, /\.tree-filter-path/);
   assert.match(css, /\.coordination-tree-table/);
+  assert.match(css, /\.coordination-filter-bar/);
   assert.match(css, /\.calendar-grid/);
   assert.match(css, /\.manager-action-center/);
   assert.match(css, /\.blocker-approval-card/);

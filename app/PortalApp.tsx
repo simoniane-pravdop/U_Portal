@@ -1510,30 +1510,34 @@ function CoordinationView({ payload, userById, select, open }: { payload: Portal
   const [query, setQuery] = useState("");
   const [ownerId, setOwnerId] = useState("all");
   const [state, setState] = useState<"all" | "risk" | "active" | "completed">("all");
+  const [level, setLevel] = useState<"all" | NodeKind>("all");
   const [expandedRows, setExpandedRows] = useState<Set<string>>(() => new Set());
   const activeNodes = payload.nodes.filter((node) => !node.archived).sort(compareNodeCodes);
   const units = payload.nodes.filter((node) => node.kind === "cycle" && !node.archived).sort(compareNodeCodes).map((node) => {
     const branch = descendants(activeNodes, node.id);
-    return { node, branch, subcycles: branch.filter((item) => item.kind === "subcycle"), tasks: branch.filter((item) => item.kind === "task") };
-  }).filter(({ branch }) => {
+    const goal = activeNodes.find((item) => item.id === node.parentId && item.kind === "goal");
+    return { node, goal, branch, subcycles: branch.filter((item) => item.kind === "subcycle"), tasks: branch.filter((item) => item.kind === "task") };
+  }).filter(({ goal, branch }) => {
+    const candidates = goal ? [goal, ...branch] : branch;
     const normalizedQuery = query.trim().toLowerCase();
-    const matchesQuery = !normalizedQuery || branch.some((item) => `${item.code} ${item.title}`.toLowerCase().includes(normalizedQuery));
-    const matchesExecutorAndState = branch.some((item) => (ownerId === "all" || item.assigneeId === ownerId)
+    const matchesQuery = !normalizedQuery || candidates.some((item) => `${item.code} ${item.title}`.toLowerCase().includes(normalizedQuery));
+    const matchesExecutorAndState = candidates.some((item) => (level === "all" || item.kind === level) && (ownerId === "all" || item.assigneeId === ownerId)
       && (state === "all" || state === "risk" && coordinationAttentionReasons(payload, item).length > 0 || state === "active" && !["completed", "cancelled"].includes(item.lifecycle) || state === "completed" && item.lifecycle === "completed"));
     return matchesQuery && matchesExecutorAndState;
   });
   const scopeIds = new Set(units.flatMap(({ node, branch }) => [...nodePath(payload.nodes, node).map((item) => item.id), ...branch.map((item) => item.id)]));
-  const attentionNodes = activeNodes.map((node) => ({ node, reasons: coordinationAttentionReasons(payload, node) })).filter(({ node, reasons }) => scopeIds.has(node.id) && reasons.length && (ownerId === "all" || node.assigneeId === ownerId));
-  const filtersActive = Boolean(query.trim() || ownerId !== "all" || state !== "all");
+  const attentionNodes = activeNodes.map((node) => ({ node, reasons: coordinationAttentionReasons(payload, node) })).filter(({ node, reasons }) => scopeIds.has(node.id) && reasons.length && (level === "all" || node.kind === level) && (ownerId === "all" || node.assigneeId === ownerId));
+  const filtersActive = Boolean(query.trim() || level !== "all" || ownerId !== "all" || state !== "all");
   const tableIds = new Set<string>();
   const matchesTableFilter = (node: WorkNode) => {
     const normalizedQuery = query.trim().toLowerCase();
     return (!normalizedQuery || `${node.code} ${node.title} ${node.result}`.toLowerCase().includes(normalizedQuery))
+      && (level === "all" || node.kind === level)
       && (ownerId === "all" || node.assigneeId === ownerId)
       && (state === "all" || state === "risk" && coordinationAttentionReasons(payload, node).length > 0 || state === "active" && !["completed", "cancelled"].includes(node.lifecycle) || state === "completed" && node.lifecycle === "completed");
   };
-  for (const { branch } of units) {
-    for (const node of branch) {
+  for (const { goal, branch } of units) {
+    for (const node of goal ? [goal, ...branch] : branch) {
       if (!filtersActive || matchesTableFilter(node)) {
         tableIds.add(node.id);
         for (const ancestor of nodePath(payload.nodes, node)) tableIds.add(ancestor.id);
@@ -1553,7 +1557,7 @@ function CoordinationView({ payload, userById, select, open }: { payload: Portal
   const toggleReports = () => setExpandedRows((current) => { const next = new Set(current); if (reportsExpanded) { for (const id of reportIds) next.delete(id); } else { for (const id of [...structureIds, ...reportIds]) next.add(id); } return next; });
   const toggleEverything = () => setExpandedRows(everythingExpanded ? new Set() : new Set(allExpandableIds));
   const childNodes = (node: WorkNode) => {
-    if (node.kind === "goal") return units.map((unit) => unit.node).filter((cycle) => cycle.parentId === node.id);
+    if (node.kind === "goal") return units.map((unit) => unit.node).filter((cycle) => cycle.parentId === node.id && tableIds.has(cycle.id));
     return activeNodes.filter((candidate) => candidate.parentId === node.id && (candidate.kind === "subcycle" || candidate.kind === "task") && tableIds.has(candidate.id));
   };
   const renderCoordinationRow = (node: WorkNode, depth = 0): React.ReactNode => {
@@ -1571,7 +1575,7 @@ function CoordinationView({ payload, userById, select, open }: { payload: Portal
       {opened && reports.map((report) => <div className="coordination-report-row" key={report.id} style={{ "--coord-depth": depth + 1 } as React.CSSProperties}><div><span>{new Date(report.createdAt).toLocaleString("uk-UA")}</span><strong>{report.summary}</strong><small>{userById(report.createdBy)?.name || "Asana"}</small></div><span>{lifecycleLabels[report.lifecycle]}</span><span>{report.progress}%</span><span>{report.forecastEnd ? dateLabel(report.forecastEnd) : "Без прогнозу"}</span><p>{report.nextAction || "Наступну дію не вказано"}</p></div>)}
     </div>;
   };
-  return <><PageIntro kicker="Одиниця координації" title="Координація за управлінськими циклами" text="Предмет координації — зведений стан усіх завдань циклу з розрізом за підциклами, строками, блокерами, рішеннями та прийманням." actions={<div className="page-filter-bar"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Пошук циклу, підциклу або завдання…" /><select value={ownerId} onChange={(event) => setOwnerId(event.target.value)}><option value="all">Усі виконавці</option>{payload.users.filter((user) => user.active).map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select><select value={state} onChange={(event) => setState(event.target.value as typeof state)}><option value="all">Усі стани</option><option value="active">Активні об’єкти</option><option value="risk">Потребує координації</option><option value="completed">Завершені об’єкти</option></select></div>} />
+  return <><PageIntro kicker="Одиниця координації" title="Координація за управлінськими циклами" text="Предмет координації — зведений стан усіх завдань циклу з розрізом за підциклами, строками, блокерами, рішеннями та прийманням." actions={<div className="page-filter-bar coordination-filter-bar"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Пошук цілі, циклу, підциклу або завдання…" /><select value={level} onChange={(event) => setLevel(event.target.value as typeof level)}><option value="all">Усі рівні</option><option value="goal">Цілі</option><option value="cycle">Цикли</option><option value="subcycle">Підцикли</option><option value="task">Завдання</option></select><select value={ownerId} onChange={(event) => setOwnerId(event.target.value)}><option value="all">Усі виконавці</option>{payload.users.filter((user) => user.active).map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select><select value={state} onChange={(event) => setState(event.target.value as typeof state)}><option value="all">Усі стани</option><option value="active">Активні об’єкти</option><option value="risk">Потребує координації</option><option value="completed">Завершені об’єкти</option></select></div>} />
     <section className="panel coordination-attention"><div className="panel-head"><div><span>Контроль і реакція</span><h2>Потребує координації</h2></div><b className="count amber">{attentionNodes.length}</b></div><div className="coordination-attention-table"><div className="coordination-attention-head"><span>Об’єкт</span><span>Причини</span><span>Відповідальний</span><span>Строк</span></div>{attentionNodes.map(({ node, reasons }) => <button key={node.id} onClick={() => select(node.id)}><div><span>{node.code} · {kindLabels[node.kind]}</span><strong>{node.title}</strong></div><div>{reasons.map((reason) => <span key={reason}>{reason}</span>)}</div><span>{userById(node.assigneeId)?.name || "—"}</span><time>{dateLabel(node.plannedEnd)}</time></button>)}{!attentionNodes.length && <p className="empty-state padded">За вибраними фільтрами немає об’єктів, що потребують координації.</p>}</div></section>
     <section className="panel coordination-tree-table"><div className="panel-head"><div><span>Зведена звітність циклів</span><h2>Стратегічна ціль → управлінський цикл → підцикл → завдання → три останні звіти</h2></div><div className="coordination-tree-controls"><button className={structureExpanded ? "active" : ""} onClick={toggleStructure}>{structureExpanded ? "Згорнути рівні" : "Розгорнути рівні"}</button><button className={reportsExpanded ? "active" : ""} disabled={!reportIds.length} onClick={toggleReports}>{reportsExpanded ? "Сховати звіти" : "Показати звіти"}</button><button className={everythingExpanded ? "active" : ""} disabled={!allExpandableIds.length} onClick={toggleEverything}>{everythingExpanded ? "Згорнути все" : "Розгорнути все"}</button><b className="count">{units.length}</b></div></div><div className="coordination-tree-head"><span>Об’єкт управління</span><span>Відповідальний</span><span>Статус</span><span>Прогрес</span><span>Строк</span><span>Увага / дія</span></div><div className="coordination-tree-body">{goals.map((goal) => renderCoordinationRow(goal))}{orphanCycles.map((cycle) => renderCoordinationRow(cycle))}{!units.length && <p className="empty-state padded">За вибраними фільтрами управлінських циклів немає.</p>}</div></section>
   </>;
