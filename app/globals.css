@@ -1222,6 +1222,15 @@ small { font-size: 11px !important; line-height: 1.35; }
 .open-work-action { width: 100%; margin-top: 8px; padding: 9px 10px; border: 1px solid var(--navy-800); border-radius: 7px; color: #fff; background: var(--navy-800); }
 .table-node-link, .table-title-link { padding: 5px 3px; text-align: left; }
 .table-title-link { width: 100%; color: var(--ink); }
+.tree-mode-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 6px 7px; border-bottom: 1px solid var(--line-soft); background: #f7f9fb; }
+.tree-mode-switch button { min-height: 34px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); background: #fff; font-size: 11px; font-weight: 850; }
+.tree-mode-switch button.active { color: #fff; border-color: var(--navy-800); background: var(--navy-800); }
+.tree-catalog:has(.tree-mode-switch):has(.compact-filters) .tree-scroll { height: calc(100% - 128px); }
+.tree-row-menu > div button.restore, .restore-action { color: #fff; border-color: var(--green); background: var(--green); }
+.tree-row-menu > div button.restore:hover { color: #fff; background: #1f674d; }
+.flat-restore { min-width: 34px; min-height: 34px; padding: 0; border: 1px solid var(--green); border-radius: 6px; color: #fff; background: var(--green); font-size: 17px; font-weight: 900; }
+.archive-state { padding: 7px 9px; border-radius: 999px; color: #75571c !important; background: var(--amber-soft); font-size: 11px !important; font-weight: 850; }
+.restore-action { min-height: 38px; padding: 8px 11px; border: 1px solid var(--green); border-radius: 7px; font-size: 12px; font-weight: 850; }
 
 .work-inbox { top: 16px; }
 .work-desk-actions { position: relative; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
@@ -1326,6 +1335,7 @@ small { font-size: 11px !important; line-height: 1.35; }
   .mobile-account strong, .mobile-account small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .mobile-account > button { min-height: 40px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; color: var(--navy-800); background: #fff; }
   .content { padding-top: 12px; }
+  .tree-catalog:has(.tree-mode-switch):has(.compact-filters) .tree-scroll { height: auto; }
   .page-intro p { display: block; font-size: 12px; }
   .my-workbench { grid-template-columns: 1fr; }
   .work-inbox { max-height: 330px; }

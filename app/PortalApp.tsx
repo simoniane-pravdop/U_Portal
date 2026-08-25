@@ -719,7 +719,7 @@ export function PortalApp() {
 
   const userById = (id: string) => payload.users.find((user) => user.id === id);
   const unreadNotificationCount = (payload.notifications || []).filter((item) => item.userId === payload.currentUser.id && !item.readAt).length;
-  const selected = payload.nodes.find((node) => node.id === selectedId && !node.archived) || payload.nodes.find((node) => !node.archived);
+  const selected = payload.nodes.find((node) => node.id === selectedId && (!node.archived || view === "tree")) || payload.nodes.find((node) => !node.archived);
   const canManage = ["owner", "admin", "goal_owner", "cycle_owner", "coordinator"].includes(payload.currentUser.role);
   const logout = async () => { await fetch("/api/auth/logout", { method: "POST" }); window.location.reload(); };
   const copyNodeLink = async (node: WorkNode, targetView: View) => {
@@ -1094,17 +1094,18 @@ function TreeView(props: {
   const [mobilePane, setMobilePane] = useState<"tree" | "card">("tree");
   const [kindFilter, setKindFilter] = useState<"all" | NodeKind>("all");
   const [ownerFilter, setOwnerFilter] = useState("all");
-  const [stateFilter, setStateFilter] = useState<"all" | "active" | "risk" | "completed">("all");
-  const active = payload.nodes.filter((node) => !node.archived).sort(compareNodeCodes);
+  const [stateFilter, setStateFilter] = useState<"open" | "all" | "active" | "risk" | "completed">("open");
+  const [treeMode, setTreeMode] = useState<"active" | "archive">("active");
+  const treeNodes = payload.nodes.filter((node) => treeMode === "archive" ? node.archived : !node.archived).sort(compareNodeCodes);
   const query = search.trim().toLowerCase();
   const matchesFilters = (node: WorkNode) => {
     const matchesQuery = !query || `${node.code} ${node.title} ${node.result}`.toLowerCase().includes(query);
     const matchesKind = kindFilter === "all" || node.kind === kindFilter;
     const matchesOwner = ownerFilter === "all" || node.ownerId === ownerFilter || node.assigneeId === ownerFilter;
-    const matchesState = stateFilter === "all" || stateFilter === "active" && !["completed", "cancelled"].includes(node.lifecycle) || stateFilter === "risk" && node.health !== "normal" || stateFilter === "completed" && node.lifecycle === "completed";
+    const matchesState = stateFilter === "all" || stateFilter === "open" && node.lifecycle !== "completed" || stateFilter === "active" && !["completed", "cancelled"].includes(node.lifecycle) || stateFilter === "risk" && node.health !== "normal" || stateFilter === "completed" && node.lifecycle === "completed";
     return matchesQuery && matchesKind && matchesOwner && matchesState;
   };
-  const directMatches = active.filter(matchesFilters);
+  const directMatches = treeNodes.filter(matchesFilters);
   const flatLevelResults = kindFilter !== "all";
   const visibleIds = new Set<string>();
   for (const node of directMatches) {
@@ -1117,9 +1118,17 @@ function TreeView(props: {
       }
     }
   }
-  const filtered = flatLevelResults ? directMatches : active.filter((node) => visibleIds.has(node.id));
+  const filtered = flatLevelResults ? directMatches : treeNodes.filter((node) => visibleIds.has(node.id));
   const predecessors = selected ? payload.dependencies.filter((item) => item.successorId === selected.id).map((item) => payload.nodes.find((node) => node.id === item.predecessorId)).filter(Boolean) as WorkNode[] : [];
-  const children = selected ? payload.nodes.filter((node) => node.parentId === selected.id && !node.archived).sort(compareNodeCodes) : [];
+  const children = selected ? payload.nodes.filter((node) => node.parentId === selected.id && node.archived === selected.archived).sort(compareNodeCodes) : [];
+  const switchTreeMode = (mode: "active" | "archive") => {
+    setTreeMode(mode);
+    setStateFilter(mode === "active" ? "open" : "all");
+    const candidates = payload.nodes.filter((node) => mode === "archive" ? node.archived : !node.archived).sort(compareNodeCodes);
+    setSelectedId(candidates[0]?.id || "");
+    setExpanded(new Set(candidates.filter((node) => node.kind !== "task").map((node) => node.id)));
+    setMobilePane("tree");
+  };
   const startTreeResize = (event: React.PointerEvent<HTMLDivElement>) => {
     if (treeCompact || window.innerWidth <= 900) return;
     event.preventDefault();
@@ -1144,51 +1153,65 @@ function TreeView(props: {
   };
 
   const archiveBranch = async (node: WorkNode) => {
-    if (!window.confirm(`Видалити ${node.code} з робочого дерева? Запис залишиться в журналі та архіві.`)) return;
+    if (!window.confirm(`Перемістити ${node.code} та всі нижчі рівні в архів? Дані, звіти й історія збережуться.`)) return;
     const branchIds = new Set(descendants(payload.nodes, node.id).map((item) => item.id));
-    const ok = await mutate(`Видалено з дерева ${node.code}`, node.id, (state) => {
+    const ok = await mutate(`Архівовано гілку ${node.code}`, node.id, (state) => {
       state.nodes.forEach((item) => { if (branchIds.has(item.id)) item.archived = true; });
     });
-    if (ok) setSelectedId(node.parentId || active.find((item) => !branchIds.has(item.id))?.id || "");
+    if (ok) setSelectedId(node.parentId || payload.nodes.filter((item) => !item.archived && !branchIds.has(item.id)).sort(compareNodeCodes)[0]?.id || "");
   };
 
-  const renderBranch = (parentId: string | null, depth = 0): React.ReactNode => filtered.filter((node) => node.parentId === parentId).map((node) => {
-    const hasChildren = active.some((child) => child.parentId === node.id);
+  const restoreBranch = async (node: WorkNode) => {
+    if (!window.confirm(`Відновити ${node.code} та всі нижчі рівні в робочому дереві?`)) return;
+    const branchIds = new Set(descendants(payload.nodes, node.id).map((item) => item.id));
+    const ok = await mutate(`Відновлено з архіву гілку ${node.code}`, node.id, (state) => {
+      state.nodes.forEach((item) => { if (branchIds.has(item.id)) item.archived = false; });
+    });
+    if (ok) { setTreeMode("active"); setStateFilter("open"); setSelectedId(node.id); }
+  };
+
+  const renderBranch = (parentId: string | null, depth = 0): React.ReactNode => {
+    const branchItems = parentId === null ? filtered.filter((node) => node.parentId === null || treeMode === "archive" && !treeNodes.some((parent) => parent.id === node.parentId)) : filtered.filter((node) => node.parentId === parentId);
+    return branchItems.map((node) => {
+    const hasChildren = treeNodes.some((child) => child.parentId === node.id);
     const mayEdit = canManage || node.ownerId === payload.currentUser.id;
     const lock = locks.find((item) => item.entityId === node.id && item.userId !== payload.currentUser.id);
     return <div key={node.id} className="tree-branch">
       <div className={`tree-row ${node.id === selectedId ? "selected" : ""} kind-${node.kind}`} style={{ paddingLeft: 3 + depth * 7 }}>
         <button className="tree-toggle" onClick={() => setExpanded((current) => { const next = new Set(current); if (next.has(node.id)) next.delete(node.id); else next.add(node.id); return next; })} aria-label={expanded.has(node.id) ? "Згорнути" : "Розгорнути"}>{hasChildren ? (expanded.has(node.id) ? "⌄" : "›") : "·"}</button>
         <button className="tree-row-main" onClick={() => { setSelectedId(node.id); setDetailTab("passport"); setMobilePane("card"); }}><span className="tree-code">{node.code}</span><span className="tree-name">{node.title}</span>{lock && <span className="editing-badge" title={`${lock.userName} редагує картку`}>✎ {lock.userName}</span>}<StatusBadge node={node} /></button>
-        {mayEdit && <details className="tree-row-menu"><summary title={`Дії з ${kindLabels[node.kind].toLowerCase()}`} aria-label={`Дії з ${node.code}`}>⋮</summary><div><button disabled={Boolean(lock)} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void openEdit(node); }}><span>✎</span>{lock ? `Редагує ${lock.userName}` : "Редагувати"}</button>{node.kind === "goal" && <button onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); openCreateKind("cycle", node); }}><span>＋</span>Додати цикл</button>}{node.kind === "cycle" && <><button onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); openCreateKind("subcycle", node); }}><span>＋</span>Додати підцикл</button><button onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); openCreateKind("task", node); }}><span>✓</span>Додати завдання</button></>}{node.kind === "subcycle" && <button onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); openCreateKind("task", node); }}><span>✓</span>Додати завдання</button>}<button className="delete" onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void archiveBranch(node); }}><span>×</span>Видалити з дерева</button></div></details>}
+        {mayEdit && <details className="tree-row-menu"><summary title={`Дії з ${kindLabels[node.kind].toLowerCase()}`} aria-label={`Дії з ${node.code}`}>⋮</summary><div>{treeMode === "archive" ? <button className="restore" onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void restoreBranch(node); }}><span>↺</span>Відновити гілку</button> : <><button disabled={Boolean(lock)} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void openEdit(node); }}><span>✎</span>{lock ? `Редагує ${lock.userName}` : "Редагувати"}</button>{node.kind === "goal" && <button onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); openCreateKind("cycle", node); }}><span>＋</span>Додати цикл</button>}{node.kind === "cycle" && <><button onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); openCreateKind("subcycle", node); }}><span>＋</span>Додати підцикл</button><button onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); openCreateKind("task", node); }}><span>✓</span>Додати завдання</button></>}{node.kind === "subcycle" && <button onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); openCreateKind("task", node); }}><span>✓</span>Додати завдання</button>}<button className="delete" onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void archiveBranch(node); }}><span>⌁</span>Перемістити в архів</button></>}</div></details>}
       </div>
       {hasChildren && expanded.has(node.id) && renderBranch(node.id, depth + 1)}
     </div>;
-  });
+    });
+  };
   const openTreeCard = (nodeId: string) => { setSelectedId(nodeId); setDetailTab("passport"); setMobilePane("card"); };
   const renderFlatResult = (node: WorkNode) => {
     const path = nodePath(payload.nodes, node).slice(0, -1);
     const lock = locks.find((item) => item.entityId === node.id && item.userId !== payload.currentUser.id);
+    const mayEdit = canManage || node.ownerId === payload.currentUser.id;
     return <div className="tree-filter-result" key={node.id}>
       <nav className="tree-filter-path" aria-label={`Шлях до ${node.code}`}>{path.length ? path.map((ancestor, index) => <span key={ancestor.id}><button title={`${kindLabels[ancestor.kind]} · ${ancestor.code} · ${ancestor.title}`} onClick={() => openTreeCard(ancestor.id)}>{ancestor.code}</button>{index < path.length - 1 && <i>/</i>}</span>) : <small>Верхній рівень</small>}</nav>
-      <div className={`tree-row tree-flat-row ${node.id === selectedId ? "selected" : ""} kind-${node.kind}`}><span className="tree-flat-marker">·</span><button className="tree-row-main" onClick={() => openTreeCard(node.id)} title={`${kindLabels[node.kind]} · ${node.code} · ${node.title}`}><span className="tree-code">{node.code}</span><span className="tree-name">{node.title}</span>{lock && <span className="editing-badge" title={`${lock.userName} редагує картку`}>✎ {lock.userName}</span>}<StatusBadge node={node} /></button></div>
+      <div className={`tree-row tree-flat-row ${node.id === selectedId ? "selected" : ""} kind-${node.kind}`}><span className="tree-flat-marker">·</span><button className="tree-row-main" onClick={() => openTreeCard(node.id)} title={`${kindLabels[node.kind]} · ${node.code} · ${node.title}`}><span className="tree-code">{node.code}</span><span className="tree-name">{node.title}</span>{lock && <span className="editing-badge" title={`${lock.userName} редагує картку`}>✎ {lock.userName}</span>}<StatusBadge node={node} /></button>{treeMode === "archive" && mayEdit && <button className="flat-restore" onClick={() => void restoreBranch(node)} aria-label={`Відновити ${node.code}`}>↺</button>}</div>
     </div>;
   };
 
   return <>
-    <PageIntro kicker="Структура управління" title="Дерево цілей, циклів і завдань" text="Тут створюється структура та зберігаються паспорти. Виконання й звіти ведуться у «Моїй роботі»." actions={canManage && <details className="create-uo-menu"><summary>+ Створити</summary><div>{(["goal", "cycle", "subcycle", "task"] as NodeKind[]).map((kind) => <button key={kind} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); openCreateKind(kind, selected); }}><span>{kind === "goal" ? "S" : kind === "cycle" ? "P" : kind === "subcycle" ? "P.x" : "✓"}</span>{kindLabels[kind]}</button>)}</div></details>} />
+    <PageIntro kicker="Структура управління" title="Дерево цілей, циклів і завдань" text="Тут створюється структура та зберігаються паспорти. Виконання й звіти ведуться у «Моїй роботі»." actions={canManage && treeMode === "active" && <details className="create-uo-menu"><summary>+ Створити</summary><div>{(["goal", "cycle", "subcycle", "task"] as NodeKind[]).map((kind) => <button key={kind} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); openCreateKind(kind, selected); }}><span>{kind === "goal" ? "S" : kind === "cycle" ? "P" : kind === "subcycle" ? "P.x" : "✓"}</span>{kindLabels[kind]}</button>)}</div></details>} />
     <div className="mobile-tree-switch" role="tablist"><button role="tab" aria-selected={mobilePane === "tree"} className={mobilePane === "tree" ? "active" : ""} onClick={() => setMobilePane("tree")}>Дерево</button><button role="tab" aria-selected={mobilePane === "card"} disabled={!selected} className={mobilePane === "card" ? "active" : ""} onClick={() => setMobilePane("card")}>{selected ? `Картка ${selected.code}` : "Картка"}</button></div>
     <div className={`tree-workbench ${treeCompact ? "compact-tree" : ""} mobile-pane-${mobilePane}`} style={{ "--tree-nav-width": `${treeWidth}px` } as React.CSSProperties}>
       <aside className="tree-catalog">
         <div className="catalog-head">{!treeCompact && <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Пошук у дереві…" />}<span>{filtered.length}</span><button className="tree-compact-toggle" onClick={() => setTreeCompact((value) => !value)} title={treeCompact ? "Розгорнути дерево" : "Згорнути дерево до кодів"} aria-label={treeCompact ? "Розгорнути дерево" : "Згорнути дерево до кодів"}>{treeCompact ? "→" : "К"}</button></div>
-        {!treeCompact && <div className="compact-filters"><select value={kindFilter} onChange={(event) => setKindFilter(event.target.value as "all" | NodeKind)}><option value="all">Усі рівні</option><option value="goal">Цілі</option><option value="cycle">Цикли</option><option value="subcycle">Підцикли</option><option value="task">Завдання</option></select><select value={ownerFilter} onChange={(event) => setOwnerFilter(event.target.value)}><option value="all">Усі відповідальні</option>{payload.users.filter((user) => user.active).map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select><select value={stateFilter} onChange={(event) => setStateFilter(event.target.value as typeof stateFilter)}><option value="all">Усі стани</option><option value="active">Активні</option><option value="risk">Ризик / блокер</option><option value="completed">Завершені</option></select></div>}
-        <div className={`tree-scroll ${flatLevelResults ? "flat-filter-results" : ""}`}>{flatLevelResults ? filtered.map(renderFlatResult) : renderBranch(null)}{!filtered.length && <p className="empty-state padded">{flatLevelResults ? "За вибраними фільтрами об’єктів цього рівня немає." : "Дерево порожнє. Створіть першу стратегічну ціль."}</p>}</div>
+        {!treeCompact && <div className="tree-mode-switch" role="tablist"><button role="tab" aria-selected={treeMode === "active"} className={treeMode === "active" ? "active" : ""} onClick={() => switchTreeMode("active")}>Робоче дерево</button><button role="tab" aria-selected={treeMode === "archive"} className={treeMode === "archive" ? "active" : ""} onClick={() => switchTreeMode("archive")}>Архів · {payload.nodes.filter((node) => node.archived).length}</button></div>}
+        {!treeCompact && <div className="compact-filters"><select value={kindFilter} onChange={(event) => setKindFilter(event.target.value as "all" | NodeKind)}><option value="all">Усі рівні</option><option value="goal">Цілі</option><option value="cycle">Цикли</option><option value="subcycle">Підцикли</option><option value="task">Завдання</option></select><select value={ownerFilter} onChange={(event) => setOwnerFilter(event.target.value)}><option value="all">Усі відповідальні</option>{payload.users.filter((user) => user.active).map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select><select value={stateFilter} onChange={(event) => setStateFilter(event.target.value as typeof stateFilter)}><option value="open">Усі без завершених</option><option value="all">Усі стани</option><option value="active">Активні</option><option value="risk">Ризик / блокер</option><option value="completed">Завершені</option></select></div>}
+        <div className={`tree-scroll ${flatLevelResults ? "flat-filter-results" : ""}`}>{flatLevelResults ? filtered.map(renderFlatResult) : renderBranch(null)}{!filtered.length && <p className="empty-state padded">{treeMode === "archive" ? "В архіві немає об’єктів за вибраними фільтрами." : flatLevelResults ? "За вибраними фільтрами об’єктів цього рівня немає." : "Дерево порожнє. Створіть першу стратегічну ціль."}</p>}</div>
         {!treeCompact && <button type="button" className="tree-width-handle" aria-label={`Змінити ширину навігації дерева, зараз ${treeWidth} пікселів`} title="Перетягніть для зміни ширини · стрілки — крок 20 пікселів · подвійне натискання — стандартна ширина" onPointerDown={startTreeResize} onKeyDown={(event) => { if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return; event.preventDefault(); const next = Math.max(220, Math.min(560, treeWidth + (event.key === "ArrowRight" ? 20 : -20))); setTreeWidth(next); window.localStorage.setItem("portal:tree-navigation-width", String(next)); }} onDoubleClick={() => { setTreeWidth(300); window.localStorage.setItem("portal:tree-navigation-width", "300"); }} />}
       </aside>
       {selected ? <section className="node-detail">
         <header className="node-detail-head">
           <div><span>{kindLabels[selected.kind]} · {selected.code}</span><h2>{selected.title}</h2><p>{selected.result}</p></div>
-          <div className="node-head-actions"><ProgressRing value={selected.progress} /><button className="secondary" onClick={() => void copyNodeLink(selected, "tree")}>Копіювати посилання</button><button className="primary work-link" onClick={() => openWork(selected)}>Відкрити робочу картку →</button></div>
+          <div className="node-head-actions"><ProgressRing value={selected.progress} /><button className="secondary" onClick={() => void copyNodeLink(selected, "tree")}>Копіювати посилання</button>{selected.archived ? <>{(canManage || selected.ownerId === payload.currentUser.id) && <button className="restore-action" onClick={() => void restoreBranch(selected)}>Відновити з архіву</button>}<span className="archive-state">В архіві</span></> : <button className="primary work-link" onClick={() => openWork(selected)}>Відкрити робочу картку →</button>}</div>
         </header>
         <div className="status-line"><StatusBadge node={selected} />{selected.decisionRequired && <span className="decision-badge">Потрібне рішення</span>}<span>{lifecycleLabels[selected.lifecycle]}</span><span>Оновлено {new Date(selected.updatedAt).toLocaleString("uk-UA")}</span></div>
         <div className="detail-tabs" role="tablist">{(["passport", "structure", "history"] as const).map((tab) => <button key={tab} role="tab" aria-selected={detailTab === tab} className={`${detailTab === tab ? "active" : ""} ${tab === "history" ? "history-tab" : ""}`} onClick={() => setDetailTab(tab)}>{tab === "passport" ? "Паспорт" : tab === "structure" ? "Структура і зв’язки" : `Історія · ${payload.audit.filter((entry) => entry.entityId === selected.id).length + (selected.updates || []).length}`}</button>)}</div>

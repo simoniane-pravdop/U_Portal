@@ -140,6 +140,12 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /firstAvailableNumber/);
   assert.match(source, /Intl\.Collator\("uk", \{ numeric: true/);
   assert.match(source, /sort\(compareNodeCodes\)/);
+  assert.match(source, /useState<"open" \| "all" \| "active" \| "risk" \| "completed">\("open"\)/);
+  assert.match(source, /Усі без завершених/);
+  assert.match(source, /treeMode.*archive/);
+  assert.match(source, /Перемістити в архів/);
+  assert.match(source, /Відновити гілку/);
+  assert.match(source, /Відновлено з архіву гілку/);
   assert.match(source, /nextCode\(nodes, parent, node\.id\)/);
   assert.match(source, /Після вибору портал присвоїть перший вільний номер/);
   assert.match(source, /child\.code = `\$\{updated\.code\}/);
@@ -281,6 +287,8 @@ test("compact laptop and mobile layouts are declared", async () => {
   assert.match(css, /@media \(max-width: 760px\)/);
   assert.match(css, /@media \(max-width: 520px\)/);
   assert.match(css, /\.tree-workbench\.compact-tree/);
+  assert.match(css, /\.tree-mode-switch/);
+  assert.match(css, /\.archive-state/);
   assert.match(css, /\.tree-work-snapshot/);
   assert.match(css, /\.tree-snapshot-summary/);
   assert.match(css, /\.detail-columns\.info-only > aside \{ display: none !important/);
