@@ -30,6 +30,7 @@ function visibleNodeIds(state: PortalState, user: SessionUser) {
 
 function stateForUser(state: PortalState, user: SessionUser): PortalState {
   const ids = visibleNodeIds(state, user);
+  const administrator = ["owner", "admin"].includes(user.role);
   const blockers = state.blockers.filter((item) => ids.has(item.nodeId));
   const decisions = state.decisions.filter((item) => ids.has(item.nodeId));
   const blockerIds = new Set(blockers.map((item) => item.id));
@@ -44,12 +45,12 @@ function stateForUser(state: PortalState, user: SessionUser): PortalState {
     coordinations: state.coordinations.filter((item) => ids.has(item.cycleId || item.subcycleId)).map((item) => ({ ...item, taskState: item.taskState.filter((task) => ids.has(task.nodeId)), blockerIds: item.blockerIds.filter((id) => blockerIds.has(id)), decisionIds: item.decisionIds.filter((id) => decisionIds.has(id)) })),
     discussions: (state.discussions || []).filter((item) => ids.has(item.nodeId)),
     notifications: (state.notifications || []).filter((item) => item.userId === user.id),
-    audit: state.audit.filter((item) => item.entityId === "portal" || ids.has(item.entityId)),
+    audit: administrator ? state.audit : state.audit.filter((item) => item.entityId === "portal" || ids.has(item.entityId)),
   };
 }
 
 function mergeHiddenState(current: PortalState, submitted: PortalState, user: SessionUser): PortalState {
-  if (["owner", "admin"].includes(user.role)) return { ...submitted, notifications: [...(current.notifications || []).filter((item) => item.userId !== user.id), ...(submitted.notifications || [])] };
+  if (["owner", "admin"].includes(user.role)) return { ...submitted, notifications: [...(current.notifications || []).filter((item) => item.userId !== user.id), ...(submitted.notifications || [])], audit: current.audit };
   const visible = visibleNodeIds(current, user);
   const hiddenByNode = <T extends { nodeId: string }>(items: T[]) => items.filter((item) => !visible.has(item.nodeId));
   const hiddenBlockerIds = new Set(current.blockers.filter((item) => !visible.has(item.nodeId)).map((item) => item.id));
