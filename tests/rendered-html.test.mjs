@@ -88,6 +88,7 @@ test("durable storage and integration bindings are declared", async () => {
   assert.match(stateRoute, /stateForUser/);
   assert.match(stateRoute, /mergeHiddenState/);
   assert.match(stateRoute, /node\.visibility === "company"/);
+  assert.ok(stateRoute.indexOf("body.expectedRevision !== current.revision") < stateRoute.indexOf("Журнал змін формується сервером"));
 });
 
 test("management workflow separates structure, work, dashboard, settings, and access", async () => {

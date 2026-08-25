@@ -97,6 +97,12 @@ export async function POST(request: Request) {
   if (!body.state || !Array.isArray(body.state.nodes) || !Array.isArray(body.state.users)) {
     return jsonError("Некоректна структура стану", 400);
   }
+  if (body.expectedRevision !== current.revision) {
+    return Response.json(
+      { error: "Дані вже змінив інший користувач", currentRevision: current.revision },
+      { status: 409, headers: { "Cache-Control": "no-store" } },
+    );
+  }
   body.state = mergeHiddenState(current, body.state, user);
   if (JSON.stringify(body.state.users) !== JSON.stringify(current.users)) {
     return jsonError("Користувачі та права змінюються лише в налаштуваннях порталу", 403);
@@ -174,13 +180,6 @@ export async function POST(request: Request) {
       return jsonError("Недостатньо повноважень для пов’язаної зміни", 403);
     }
   }
-  if (body.expectedRevision !== current.revision) {
-    return Response.json(
-      { error: "Дані вже змінив інший користувач", currentRevision: current.revision },
-      { status: 409, headers: { "Cache-Control": "no-store" } },
-    );
-  }
-
   const db = await database();
   if (db && body.action?.startsWith("Оновлено ") && body.entityId) {
     const now = new Date().toISOString();
