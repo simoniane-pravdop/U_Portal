@@ -136,6 +136,10 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /Підключити Telegram/);
   assert.match(source, /recalculateHierarchy/);
   assert.match(source, /tree-row-menu/);
+  assert.match(source, /TreeWorkSnapshot/);
+  assert.match(source, /Стан, звіти та взаємодія/);
+  assert.match(source, /Робоча картка · лише перегляд/);
+  assert.match(source, /Останні три звіти/);
   assert.match(source, /mobile-tree-switch/);
   assert.match(source, /compact-tree/);
   assert.match(source, /tree-width-handle/);
@@ -264,6 +268,9 @@ test("compact laptop and mobile layouts are declared", async () => {
   assert.match(css, /@media \(max-width: 760px\)/);
   assert.match(css, /@media \(max-width: 520px\)/);
   assert.match(css, /\.tree-workbench\.compact-tree/);
+  assert.match(css, /\.tree-work-snapshot/);
+  assert.match(css, /\.tree-snapshot-summary/);
+  assert.match(css, /\.detail-columns\.info-only > aside \{ display: none !important/);
   assert.match(css, /--tree-nav-width/);
   assert.match(css, /\.tree-filter-path/);
   assert.match(css, /\.coordination-tree-table/);
