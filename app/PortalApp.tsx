@@ -354,7 +354,7 @@ function blankNode(nodes: WorkNode[], parent: WorkNode | undefined, user: Portal
     coordinationIntervalDays: 7,
     coordinationWeekday: 1,
     controlPlace: "",
-    visibility: "company",
+    visibility: "participants",
     archived: false,
     evidence: [],
     updates: [],
@@ -1899,8 +1899,9 @@ function NodeModal({ node, setNode, nodes, users, errors, clearError, close, sav
       <Field wide label="Обмеження повноважень" hint="Зафіксуйте, які рішення відповідальний не може приймати самостійно, що потребує погодження та коли потрібна ескалація."><textarea value={node.authority} onChange={(event) => update("authority", event.target.value)} placeholder="Рішення поза повноваженнями, обов’язкові погодження та ескалація" /></Field>
       <Field wide label="Ресурс" hint="Люди, бюджет, матеріали, доступи або час, потрібні для результату."><textarea value={node.resource} onChange={(event) => update("resource", event.target.value)} placeholder="Наприклад: 8 годин дизайнера та доступ до CMS" /></Field>
       <Field wide label="Контрольне місце" hint="Система або сторінка, де перевіряється фактичне виконання. Кнопка «+» додає ще одне контрольне місце." example="Asana, CRM, сторінка сайту або реєстр договорів"><div className="multi-value-field">{controlPlaces.map((place, index) => <div key={index}><input value={place} onChange={(event) => setControlPlace(index, event.target.value)} placeholder="Наприклад: Asana або сторінка сайту" />{index === controlPlaces.length - 1 && <button type="button" onClick={() => update("controlPlace", `${node.controlPlace}${node.controlPlace ? "\n" : ""}`)} aria-label="Додати контрольне місце">+</button>}</div>)}</div></Field>
-      <Field label="Доступ" required hint="Визначає, хто бачить об’єкт та його робочі дані."><select value={node.visibility} onChange={(event) => update("visibility", event.target.value as WorkNode["visibility"])}><option value="company">Уся компанія</option><option value="participants">Лише учасники</option></select></Field>
+      <Field label="Доступ" required hint="За замовчуванням картку бачать лише її учасники. За потреби можна відкрити її для всієї компанії."><select value={node.visibility} onChange={(event) => update("visibility", event.target.value as WorkNode["visibility"])}><option value="participants">Лише учасники</option><option value="company">Уся компанія</option></select></Field>
       <Field label="Повторення" hint="Для циклів і завдань, які повторюються за однаковим правилом."><select value={node.recurrence.enabled ? node.recurrence.frequency : "off"} onChange={(event) => setNode({ ...node, recurrence: { ...node.recurrence, enabled: event.target.value !== "off", frequency: event.target.value === "off" ? "monthly" : event.target.value as WorkNode["recurrence"]["frequency"] } })}><option value="off">Немає</option><option value="weekly">Щотижня</option><option value="monthly">Щомісяця</option><option value="quarterly">Щокварталу</option><option value="yearly">Щороку</option></select></Field>
+      {node.kind === "task" && <Field label="Статус" required error={errors.lifecycle} hint="Початковий статус завдання. «На прийманні» та «Завершено» встановлюються лише системним маршрутом після виконання і приймання результату."><select value={node.lifecycle} aria-invalid={Boolean(errors.lifecycle)} onChange={(event) => { clearError("lifecycle"); const lifecycle = event.target.value as LifecycleStatus; setNode({ ...node, lifecycle, lifecycleOverride: undefined, actualStart: lifecycle === "in_progress" ? node.actualStart || isoNow().slice(0, 10) : node.actualStart }); }}>{Object.entries(lifecycleLabels).filter(([value]) => !["acceptance", "completed"].includes(value)).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>}
     </div>
   </ModalShell>;
 }

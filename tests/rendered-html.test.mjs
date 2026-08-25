@@ -246,6 +246,10 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /Періодичність, днів/);
   assert.match(source, /Автоматично з нижчих рівнів/);
   assert.match(source, /label="Статус"/);
+  assert.match(source, /visibility: "participants"/);
+  assert.match(source, /node\.kind === "task" && <Field label="Статус"/);
+  assert.match(source, /!\["acceptance", "completed"\]\.includes\(value\)/);
+  assert.match(source, /За замовчуванням картку бачать лише її учасники/);
   assert.match(source, /selected\?\.kind === "cycle"/);
   assert.doesNotMatch(source, /Одиниця координації — підцикл/);
   assert.match(source, /Статус Завдання|parent\.health = state\.blockers/);
