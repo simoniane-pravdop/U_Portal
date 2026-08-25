@@ -335,6 +335,8 @@ test("compact laptop and mobile layouts are declared", async () => {
   assert.match(css, /\.inbox-actions button strong/);
   assert.match(css, /\.coordination-state-multiselect/);
   assert.match(css, /\.coordination-attention-table > button > div:first-child strong/);
+  assert.match(css, /minmax\(380px, 1\.55fr\).*minmax\(165px, \.62fr\)/);
+  assert.match(css, /\.coordination-attention-table > button time \{ white-space: nowrap/);
   assert.match(css, /\.health-badge\.normal\.lifecycle-idea/);
   assert.match(css, /\.tree-work-snapshot/);
   assert.match(css, /\.tree-snapshot-summary/);

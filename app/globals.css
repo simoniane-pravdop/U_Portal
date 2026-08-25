@@ -1354,12 +1354,15 @@ small { font-size: 11px !important; line-height: 1.35; }
 .notification-list article small, .notification-list .mark-read { font-size: 11px !important; }
 .coordination-attention .panel-head span { font-size: 12px; }
 .coordination-attention .panel-head h2 { font-size: 20px; }
+.coordination-attention-head, .coordination-attention-table > button { grid-template-columns: minmax(380px, 1.55fr) minmax(260px, 1fr) minmax(210px, .78fr) minmax(165px, .62fr); gap: 16px; }
 .coordination-attention-head { padding-block: 11px; font-size: 12px; }
 .coordination-attention-table > button { min-height: 74px; padding-block: 13px; }
 .coordination-attention-table > button > div:first-child span { font-size: 12px; }
 .coordination-attention-table > button > div:first-child strong { overflow: visible; font-size: 14px; text-overflow: clip; white-space: normal; line-height: 1.4; }
 .coordination-attention-table > button > div:nth-child(2) span { font-size: 12px; }
 .coordination-attention-table > button > span, .coordination-attention-table > button time { font-size: 13px; }
+.coordination-attention-table > button > span { color: #405166; line-height: 1.35; }
+.coordination-attention-table > button time { white-space: nowrap; }
 
 /* Типографічна шкала, уніфікована зі зведеною координацією */
 body { font-size: 14px; }
