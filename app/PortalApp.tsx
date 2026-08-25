@@ -293,11 +293,26 @@ function parentKindsLabel(kinds: NodeKind[]) {
   return kinds.map((kind) => kindLabels[kind].toLowerCase()).join(" або ");
 }
 
-function nextCode(nodes: WorkNode[], parent?: WorkNode) {
-  if (!parent) return `S${nodes.filter((node) => node.kind === "goal").length + 1}`;
-  if (parent.kind === "goal") return `P${nodes.filter((node) => node.kind === "cycle").length + 1}`;
-  const siblings = nodes.filter((node) => node.parentId === parent.id);
-  return `${parent.code}.${siblings.length + 1}`;
+function firstAvailableNumber(values: number[]) {
+  const occupied = new Set(values.filter((value) => Number.isInteger(value) && value > 0));
+  let candidate = 1;
+  while (occupied.has(candidate)) candidate += 1;
+  return candidate;
+}
+
+function nextCode(nodes: WorkNode[], parent?: WorkNode, excludeId = "") {
+  const availableNodes = nodes.filter((node) => node.id !== excludeId);
+  if (!parent) {
+    const numbers = availableNodes.filter((node) => node.kind === "goal").map((node) => Number(node.code.match(/^S(\d+)$/i)?.[1] || 0));
+    return `S${firstAvailableNumber(numbers)}`;
+  }
+  if (parent.kind === "goal") {
+    const numbers = availableNodes.filter((node) => node.kind === "cycle").map((node) => Number(node.code.match(/^P(\d+)$/i)?.[1] || 0));
+    return `P${firstAvailableNumber(numbers)}`;
+  }
+  const prefix = `${parent.code}.`;
+  const numbers = availableNodes.filter((node) => node.parentId === parent.id && node.code.startsWith(prefix)).map((node) => Number(node.code.slice(prefix.length).match(/^(\d+)$/)?.[1] || 0));
+  return `${prefix}${firstAvailableNumber(numbers)}`;
 }
 
 function blankNode(nodes: WorkNode[], parent: WorkNode | undefined, user: PortalUser, requestedKind?: NodeKind): WorkNode {
@@ -778,10 +793,28 @@ export function PortalApp() {
       return;
     }
     const exists = payload.nodes.some((node) => node.id === draftNode.id);
+    const previousNode = payload.nodes.find((node) => node.id === draftNode.id);
+    if (previousNode && previousNode.code !== draftNode.code) {
+      const branchIds = new Set(descendants(payload.nodes, draftNode.id).map((node) => node.id));
+      const futureCodes = payload.nodes.filter((node) => branchIds.has(node.id) && node.id !== draftNode.id && node.code.startsWith(`${previousNode.code}.`)).map((node) => `${draftNode.code}${node.code.slice(previousNode.code.length)}`.toLowerCase());
+      const conflict = payload.nodes.find((node) => !branchIds.has(node.id) && futureCodes.includes(node.code.toLowerCase()));
+      if (conflict) {
+        setNodeErrors({ code: `Перенумерація створить конфлікт із ${conflict.code}. Оберіть інше місце в дереві.` });
+        setNotice("Не вдалося зберегти: коди нижчих рівнів перетнуться з наявною гілкою.", "error");
+        return;
+      }
+    }
     const updated = { ...draftNode, updatedAt: isoNow() };
     const ok = await mutate(exists ? `Оновлено ${draftNode.code}` : `Створено ${draftNode.code}`, draftNode.id, (state) => {
       const index = state.nodes.findIndex((node) => node.id === updated.id);
-      if (index >= 0) state.nodes[index] = updated;
+      if (index >= 0) {
+        const previousCode = state.nodes[index].code;
+        state.nodes[index] = updated;
+        if (previousCode !== updated.code) {
+          const branchIds = new Set(descendants(state.nodes, updated.id).map((node) => node.id));
+          for (const child of state.nodes) if (child.id !== updated.id && branchIds.has(child.id) && child.code.startsWith(`${previousCode}.`)) child.code = `${updated.code}${child.code.slice(previousCode.length)}`;
+        }
+      }
       else state.nodes.push(updated);
     });
     if (ok) {
@@ -1842,8 +1875,8 @@ function NodeModal({ node, setNode, nodes, users, errors, clearError, close, sav
     <div className="node-path" aria-label="Шлях у дереві">{path.map((item, index) => <span key={item.id}><b>{item.code || "…"}</b><small>{item.title || kindLabels[item.kind]}</small>{index < path.length - 1 && <i>/</i>}</span>)}</div>
     <div className="form-grid">
       <Field label="Код" required error={errors.code} hint="Стабільний код показує місце в дереві й не повинен повторюватися." example="S1, P1, P1.1 або P1.1.3"><input value={node.code} aria-invalid={Boolean(errors.code)} onChange={(event) => update("code", event.target.value)} placeholder="Наприклад: P1.1.3" /></Field>
-      <Field label="Тип" required hint="Рівень визначає батьківський рівень, права координації та спосіб розрахунку стану."><select value={node.kind} onChange={(event) => { const kind = event.target.value as NodeKind; const parentKinds = allowedParentKinds(kind); const currentParent = node.parentId ? nodes.find((item) => item.id === node.parentId) : undefined; const parentId = currentParent && parentKinds.includes(currentParent.kind) ? currentParent.id : parentKinds.length ? nodes.find((item) => parentKinds.includes(item.kind) && !item.archived)?.id || null : null; setNode({ ...node, kind, parentId }); }}><option value="goal">Стратегічна ціль</option><option value="cycle">Управлінський цикл</option><option value="subcycle">Підцикл</option><option value="task">Завдання</option></select></Field>
-      {allowedParents.length > 0 && <Field wide required error={errors.parentId} label={`Батьківський рівень · ${parentKindsLabel(allowedParents)}`} hint={node.kind === "task" ? "Завдання можна включити безпосередньо в управлінський цикл або в його підцикл." : "Оберіть безпосередній вищий рівень, до результату якого належить цей об’єкт."}><select value={node.parentId || ""} aria-invalid={Boolean(errors.parentId)} onChange={(event) => update("parentId", event.target.value)}><option value="">Оберіть батьківський рівень</option>{validParents.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.title}</option>)}</select></Field>}
+      <Field label="Тип" required hint="Після зміни типу портал автоматично визначає допустимий батьківський рівень і перший вільний код у новій гілці."><select value={node.kind} onChange={(event) => { const kind = event.target.value as NodeKind; const parentKinds = allowedParentKinds(kind); const currentParent = node.parentId ? nodes.find((item) => item.id === node.parentId) : undefined; const parent = currentParent && parentKinds.includes(currentParent.kind) ? currentParent : parentKinds.length ? nodes.find((item) => parentKinds.includes(item.kind) && !item.archived && item.id !== node.id) : undefined; clearError("parentId"); clearError("code"); setNode({ ...node, kind, parentId: parent?.id || null, code: nextCode(nodes, parent, node.id) }); }}><option value="goal">Стратегічна ціль</option><option value="cycle">Управлінський цикл</option><option value="subcycle">Підцикл</option><option value="task">Завдання</option></select></Field>
+      {allowedParents.length > 0 && <Field wide required error={errors.parentId} label={`Батьківський рівень · ${parentKindsLabel(allowedParents)}`} hint={node.kind === "task" ? "Завдання можна включити безпосередньо в управлінський цикл або в його підцикл. Код автоматично зміниться за новим шляхом." : "Після вибору портал присвоїть перший вільний номер цього рівня в обраній гілці."}><select value={node.parentId || ""} aria-invalid={Boolean(errors.parentId)} onChange={(event) => { const parent = nodes.find((item) => item.id === event.target.value); clearError("parentId"); clearError("code"); setNode({ ...node, parentId: parent?.id || null, code: nextCode(nodes, parent, node.id) }); }}><option value="">Оберіть батьківський рівень</option>{validParents.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.title}</option>)}</select></Field>}
       <Field wide label="Назва" required error={errors.title} hint="Коротко назвіть результат або предмет управління — без опису процесу." example="Поновлення старих послуг"><input value={node.title} aria-invalid={Boolean(errors.title)} onChange={(event) => update("title", event.target.value)} placeholder="Наприклад: Поновлення старих послуг" /></Field>
       <Field wide label="Опис" hint="Дайте контекст: навіщо цей об’єкт існує, що охоплює та які має межі."><textarea value={node.description} onChange={(event) => update("description", event.target.value)} placeholder="Короткий контекст, межі та призначення" /></Field>
       <Field wide label="Готовий результат" required error={errors.result} hint="Опишіть стан, який можна перевірити й прийняти. Уникайте формулювань «працювати над» або «займатися»." example="Сторінка послуги оновлена, погоджена та опублікована."><textarea value={node.result} aria-invalid={Boolean(errors.result)} onChange={(event) => update("result", event.target.value)} placeholder="Наприклад: матеріал погоджено й опубліковано" /></Field>

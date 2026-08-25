@@ -135,6 +135,11 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.doesNotMatch(source, /<header className="topbar">/);
   assert.match(source, /Підключити Telegram/);
   assert.match(source, /recalculateHierarchy/);
+  assert.match(source, /firstAvailableNumber/);
+  assert.match(source, /nextCode\(nodes, parent, node\.id\)/);
+  assert.match(source, /Після вибору портал присвоїть перший вільний номер/);
+  assert.match(source, /child\.code = `\$\{updated\.code\}/);
+  assert.match(source, /Перенумерація створить конфлікт/);
   assert.match(source, /tree-row-menu/);
   assert.match(source, /TreeWorkSnapshot/);
   assert.match(source, /Стан, звіти та взаємодія/);
