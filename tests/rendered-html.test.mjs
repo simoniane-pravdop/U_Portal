@@ -272,6 +272,13 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /useState<Set<string>>\(\(\) => new Set\(\)\)/);
   assert.match(source, /goals\.map\(\(goal\) => renderCoordinationRow\(goal\)\)/);
   assert.match(source, /Календар строків і координацій/);
+  assert.match(source, /useState<"week" \| "month" \| "year">\("month"\)/);
+  assert.match(source, /calendar-view-switch/);
+  assert.match(source, /calendar-week-grid/);
+  assert.match(source, /calendar-year-grid/);
+  assert.match(source, /Тиждень/);
+  assert.match(source, /Місяць/);
+  assert.match(source, /Рік/);
   assert.match(source, /Перша координація/);
   assert.match(source, /Періодичність, днів/);
   assert.match(source, /Автоматично з нижчих рівнів/);
@@ -337,6 +344,9 @@ test("compact laptop and mobile layouts are declared", async () => {
   assert.match(css, /\.coordination-tree-table/);
   assert.match(css, /\.coordination-filter-bar/);
   assert.match(css, /\.calendar-grid/);
+  assert.match(css, /\.calendar-week-grid/);
+  assert.match(css, /\.calendar-year-grid/);
+  assert.match(css, /\.calendar-agenda button > strong \{ font-size: 13px/);
   assert.match(css, /\.manager-action-center/);
   assert.match(css, /\.blocker-approval-card/);
   assert.match(css, /\.asana-work \.asana-create-form/);

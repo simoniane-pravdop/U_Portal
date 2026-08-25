@@ -100,6 +100,10 @@ function dateLabel(value: string) {
   return new Intl.DateTimeFormat("uk-UA", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(`${value}T12:00:00`));
 }
 
+function calendarDateKey(value: Date) {
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+}
+
 function daysUntil(value: string) {
   if (!value) return null;
   return Math.ceil((new Date(`${value}T23:59:59`).getTime() - Date.now()) / 86_400_000);
@@ -1082,14 +1086,23 @@ type CalendarEvent = { id: string; date: string; nodeId: string; ownerId: string
 
 function CalendarView({ payload, userById, openNode }: { payload: PortalPayload; userById: (id: string) => PortalUser | undefined; openNode: (id: string) => void }) {
   const today = new Date();
-  const [month, setMonth] = useState(() => `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`);
+  const todayKey = calendarDateKey(today);
+  const [anchor, setAnchor] = useState(todayKey);
+  const [viewMode, setViewMode] = useState<"week" | "month" | "year">("month");
   const [ownerId, setOwnerId] = useState("all");
   const [type, setType] = useState<"all" | CalendarEvent["type"]>("all");
-  const [year, monthNumber] = month.split("-").map(Number);
-  const monthStart = `${month}-01`;
-  const monthEnd = `${month}-${String(new Date(year, monthNumber, 0).getDate()).padStart(2, "0")}`;
+  const anchorDate = new Date(`${anchor}T12:00:00`);
+  const year = anchorDate.getFullYear();
+  const monthNumber = anchorDate.getMonth() + 1;
+  const month = `${year}-${String(monthNumber).padStart(2, "0")}`;
+  const weekStartDate = new Date(anchorDate); weekStartDate.setDate(anchorDate.getDate() - (anchorDate.getDay() + 6) % 7);
+  const weekEndDate = new Date(weekStartDate); weekEndDate.setDate(weekStartDate.getDate() + 6);
+  const periodStartDate = viewMode === "week" ? weekStartDate : viewMode === "month" ? new Date(year, monthNumber - 1, 1, 12) : new Date(year, 0, 1, 12);
+  const periodEndDate = viewMode === "week" ? weekEndDate : viewMode === "month" ? new Date(year, monthNumber, 0, 12) : new Date(year, 11, 31, 12);
+  const periodStart = calendarDateKey(periodStartDate);
+  const periodEnd = calendarDateKey(periodEndDate);
   const events: CalendarEvent[] = [];
-  const add = (event: CalendarEvent) => { if (event.date >= monthStart && event.date <= monthEnd) events.push(event); };
+  const add = (event: CalendarEvent) => { if (event.date >= periodStart && event.date <= periodEnd) events.push(event); };
   for (const node of payload.nodes.filter((item) => !item.archived && item.lifecycle !== "idea")) {
     if (node.plannedStart) add({ id: `${node.id}-start`, date: node.plannedStart, nodeId: node.id, ownerId: node.assigneeId, type: "start", title: `Початок: ${node.title}`, code: node.code });
     if (node.plannedEnd) add({ id: `${node.id}-deadline`, date: node.plannedEnd, nodeId: node.id, ownerId: node.assigneeId, type: "deadline", title: `Строк: ${node.title}`, code: node.code });
@@ -1097,10 +1110,10 @@ function CalendarView({ payload, userById, openNode }: { payload: PortalPayload;
     if (node.kind === "cycle" && node.coordinationStartDate && (node.coordinationIntervalDays || 0) > 0) {
       const interval = node.coordinationIntervalDays || 7;
       const occurrence = new Date(`${node.coordinationStartDate}T12:00:00`);
-      const end = new Date(`${monthEnd}T12:00:00`);
-      while (occurrence.toISOString().slice(0, 10) < monthStart) occurrence.setDate(occurrence.getDate() + interval);
+      const end = new Date(`${periodEnd}T12:00:00`);
+      while (calendarDateKey(occurrence) < periodStart) occurrence.setDate(occurrence.getDate() + interval);
       while (occurrence <= end) {
-        const date = occurrence.toISOString().slice(0, 10);
+        const date = calendarDateKey(occurrence);
         add({ id: `${node.id}-coordination-${date}`, date, nodeId: node.id, ownerId: node.assigneeId, type: "coordination", title: `Координація: ${node.title}`, code: node.code });
         occurrence.setDate(occurrence.getDate() + interval);
       }
@@ -1117,11 +1130,15 @@ function CalendarView({ payload, userById, openNode }: { payload: PortalPayload;
   const leading = (firstDay.getDay() + 6) % 7;
   const daysInMonth = new Date(year, monthNumber, 0).getDate();
   const cells = Array.from({ length: Math.ceil((leading + daysInMonth) / 7) * 7 }, (_, index) => index - leading + 1);
-  const changeMonth = (delta: number) => { const next = new Date(year, monthNumber - 1 + delta, 1, 12); setMonth(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}`); };
+  const weekDays = Array.from({ length: 7 }, (_, index) => { const date = new Date(weekStartDate); date.setDate(weekStartDate.getDate() + index); return date; });
+  const yearMonths = Array.from({ length: 12 }, (_, index) => ({ index, date: new Date(year, index, 1, 12), key: `${year}-${String(index + 1).padStart(2, "0")}` }));
+  const changePeriod = (delta: number) => { const next = new Date(anchorDate); if (viewMode === "week") next.setDate(next.getDate() + delta * 7); else if (viewMode === "month") next.setMonth(next.getMonth() + delta); else next.setFullYear(next.getFullYear() + delta); setAnchor(calendarDateKey(next)); };
+  const periodLabel = viewMode === "week" ? `${dateLabel(calendarDateKey(weekStartDate))} — ${dateLabel(calendarDateKey(weekEndDate))}` : viewMode === "month" ? new Intl.DateTimeFormat("uk-UA", { month: "long", year: "numeric" }).format(firstDay) : String(year);
+  const agendaLabel = viewMode === "week" ? "Перелік тижня" : viewMode === "month" ? "Перелік місяця" : "Перелік року";
   const eventLabel = (eventType: CalendarEvent["type"]) => eventType === "start" ? "Початок" : eventType === "deadline" ? "Строк" : eventType === "forecast" ? "Прогноз" : eventType === "coordination" ? "Координація" : eventType === "blocker" ? "Блокер" : "Рішення";
-  return <><PageIntro kicker="Часовий контур" title="Календар строків і координацій" text="Планові дати, прогнози, управлінські рішення, реакція на блокери та повторювані координації циклів в одному місці." actions={<div className="calendar-period"><button onClick={() => changeMonth(-1)}>‹</button><button onClick={() => setMonth(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`)}>Сьогодні</button><strong>{new Intl.DateTimeFormat("uk-UA", { month: "long", year: "numeric" }).format(firstDay)}</strong><button onClick={() => changeMonth(1)}>›</button></div>} />
-    <section className="panel calendar-panel"><div className="calendar-filters"><select value={ownerId} onChange={(event) => setOwnerId(event.target.value)}><option value="all">Усі відповідальні</option>{payload.users.filter((user) => user.active).map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select><select value={type} onChange={(event) => setType(event.target.value as typeof type)}><option value="all">Усі події</option><option value="coordination">Координації</option><option value="deadline">Планові строки</option><option value="forecast">Прогнози</option><option value="start">Початки</option><option value="blocker">Блокери</option><option value="decision">Рішення</option></select><span>{visible.length} подій</span></div><div className="calendar-grid"><div className="calendar-weekdays">{["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"].map((day) => <span key={day}>{day}</span>)}</div><div className="calendar-days">{cells.map((day, index) => { const date = day > 0 && day <= daysInMonth ? `${month}-${String(day).padStart(2, "0")}` : ""; const dayEvents = date ? visible.filter((event) => event.date === date) : []; return <div key={`${day}-${index}`} className={`${date ? "" : "outside"} ${date === today.toISOString().slice(0, 10) ? "today" : ""}`}><time>{date ? day : ""}</time>{dayEvents.slice(0, 4).map((event) => <button key={event.id} className={event.type} onClick={() => openNode(event.nodeId)} title={`${eventLabel(event.type)} · ${event.title}`}><span>{event.code}</span>{event.title}</button>)}{dayEvents.length > 4 && <small>+{dayEvents.length - 4} подій</small>}</div>; })}</div></div></section>
-    <section className="panel calendar-agenda"><div className="panel-head"><div><span>Перелік місяця</span><h2>Усі строки за датою</h2></div><b className="count">{visible.length}</b></div><div>{visible.map((event) => <button key={event.id} onClick={() => openNode(event.nodeId)}><time>{dateLabel(event.date)}</time><span className={event.type}>{eventLabel(event.type)}</span><strong>{event.code} · {event.title}</strong><small>{userById(event.ownerId)?.name || "Не визначено"}</small></button>)}{!visible.length && <p className="empty-state padded">У цьому місяці подій за вибраними фільтрами немає.</p>}</div></section>
+  return <><PageIntro kicker="Часовий контур" title="Календар строків і координацій" text="Планові дати, прогнози, управлінські рішення, реакція на блокери та повторювані координації циклів в одному місці." actions={<div className="calendar-header-actions"><div className="calendar-view-switch">{(["week", "month", "year"] as const).map((mode) => <button key={mode} className={viewMode === mode ? "active" : ""} onClick={() => setViewMode(mode)}>{mode === "week" ? "Тиждень" : mode === "month" ? "Місяць" : "Рік"}</button>)}</div><div className="calendar-period"><button onClick={() => changePeriod(-1)} aria-label="Попередній період">‹</button><button onClick={() => setAnchor(todayKey)}>Сьогодні</button><strong>{periodLabel}</strong><button onClick={() => changePeriod(1)} aria-label="Наступний період">›</button></div></div>} />
+    <section className="panel calendar-panel"><div className="calendar-filters"><select value={ownerId} onChange={(event) => setOwnerId(event.target.value)}><option value="all">Усі відповідальні</option>{payload.users.filter((user) => user.active).map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select><select value={type} onChange={(event) => setType(event.target.value as typeof type)}><option value="all">Усі події</option><option value="coordination">Координації</option><option value="deadline">Планові строки</option><option value="forecast">Прогнози</option><option value="start">Початки</option><option value="blocker">Блокери</option><option value="decision">Рішення</option></select><span>{visible.length} подій</span></div>{viewMode === "month" && <div className="calendar-grid"><div className="calendar-weekdays">{["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"].map((day) => <span key={day}>{day}</span>)}</div><div className="calendar-days">{cells.map((day, index) => { const date = day > 0 && day <= daysInMonth ? `${month}-${String(day).padStart(2, "0")}` : ""; const dayEvents = date ? visible.filter((event) => event.date === date) : []; return <div key={`${day}-${index}`} className={`${date ? "" : "outside"} ${date === todayKey ? "today" : ""}`}><time>{date ? day : ""}</time>{dayEvents.slice(0, 4).map((event) => <button key={event.id} className={event.type} onClick={() => openNode(event.nodeId)} title={`${eventLabel(event.type)} · ${event.title}`}><span>{event.code}</span>{event.title}</button>)}{dayEvents.length > 4 && <small>+{dayEvents.length - 4} подій</small>}</div>; })}</div></div>}{viewMode === "week" && <div className="calendar-week-grid">{weekDays.map((day) => { const date = calendarDateKey(day); const dayEvents = visible.filter((event) => event.date === date); return <section key={date} className={date === todayKey ? "today" : ""}><header><span>{new Intl.DateTimeFormat("uk-UA", { weekday: "short" }).format(day)}</span><strong>{day.getDate()}</strong></header><div>{dayEvents.map((event) => <button key={event.id} className={event.type} onClick={() => openNode(event.nodeId)}><span>{event.code}</span><strong>{event.title}</strong><small>{eventLabel(event.type)}</small></button>)}{!dayEvents.length && <p>Подій немає</p>}</div></section>; })}</div>}{viewMode === "year" && <div className="calendar-year-grid">{yearMonths.map((item) => { const monthEvents = visible.filter((event) => event.date.startsWith(item.key)); return <button key={item.key} onClick={() => { setAnchor(calendarDateKey(item.date)); setViewMode("month"); }}><header><strong>{new Intl.DateTimeFormat("uk-UA", { month: "long" }).format(item.date)}</strong><span>{monthEvents.length}</span></header><div>{monthEvents.slice(0, 3).map((event) => <small key={event.id}><b>{event.code}</b>{event.title}</small>)}{!monthEvents.length && <small>Подій немає</small>}{monthEvents.length > 3 && <em>+{monthEvents.length - 3} подій</em>}</div></button>; })}</div>}</section>
+    <section className="panel calendar-agenda"><div className="panel-head"><div><span>{agendaLabel}</span><h2>Усі строки за датою</h2></div><b className="count">{visible.length}</b></div><div>{visible.map((event) => <button key={event.id} onClick={() => openNode(event.nodeId)}><time>{dateLabel(event.date)}</time><span className={event.type}>{eventLabel(event.type)}</span><strong>{event.code} · {event.title}</strong><small>{userById(event.ownerId)?.name || "Не визначено"}</small></button>)}{!visible.length && <p className="empty-state padded">У вибраному періоді подій за фільтрами немає.</p>}</div></section>
   </>;
 }
 
