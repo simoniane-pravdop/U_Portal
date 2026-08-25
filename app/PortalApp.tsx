@@ -27,6 +27,7 @@ type View = "dashboard" | "inbox" | "calendar" | "tree" | "my" | "coordination" 
 type Modal = "node" | "blocker" | "decision" | "coordination" | "dependency" | "evidence" | null;
 type WorkFilter = "action" | "manage" | "acceptance" | "all";
 type WorkFocus = "blocker" | "decision" | "acceptance" | "discussion" | null;
+type CoordinationStateFilter = LifecycleStatus | "active" | "risk" | "no_report_5d";
 type NoticeTone = "success" | "error";
 type Notify = (value: string, tone?: NoticeTone) => void;
 type NodeErrors = Partial<Record<keyof WorkNode, string>>;
@@ -41,6 +42,7 @@ type TelegramStatus = {
 
 const lifecycleLabels: Record<LifecycleStatus, string> = {
   draft: "Чернетка",
+  idea: "Ідея",
   planned: "Заплановано",
   ready: "Готово до старту",
   in_progress: "У роботі",
@@ -114,7 +116,7 @@ function coordinationAttentionReasons(payload: PortalPayload, node: WorkNode) {
   if (payload.decisions.some((item) => item.nodeId === node.id && item.status === "requested")) reasons.add("Рішення не прийнято");
   if (payload.acceptances.some((item) => item.nodeId === node.id && item.status === "submitted") || node.lifecycle === "acceptance") reasons.add("Результат не прийнято");
   if (node.kind === "task" && node.lifecycle === "completed" && !payload.acceptances.some((item) => item.nodeId === node.id && item.status === "accepted")) reasons.add("Завершено без приймання");
-  if (node.plannedEnd && node.plannedEnd < today && !["completed", "cancelled"].includes(node.lifecycle)) reasons.add("Прострочений строк");
+  if (node.plannedEnd && node.plannedEnd < today && !["idea", "completed", "cancelled"].includes(node.lifecycle)) reasons.add("Прострочений строк");
   if (lacksRecentReport(node)) reasons.add("Немає звіту понад 5 днів");
   if (node.kind === "cycle" && !descendants(payload.nodes.filter((item) => !item.archived), node.id).some((item) => item.kind === "task")) reasons.add("Цикл без завдань");
   return [...reasons];
@@ -127,11 +129,16 @@ function branchHasOpenBlocker(payload: PortalPayload, node: WorkNode) {
 }
 
 function lacksRecentReport(node: WorkNode, days = 5) {
-  if (node.kind !== "task" || ["completed", "cancelled"].includes(node.lifecycle)) return false;
+  if (node.kind !== "task" || ["idea", "completed", "cancelled"].includes(node.lifecycle)) return false;
   const dates = (node.updates || []).map((item) => new Date(item.createdAt).getTime()).filter(Number.isFinite);
   const start = node.actualStart ? new Date(`${node.actualStart}T12:00:00`).getTime() : new Date(node.createdAt).getTime();
   const latest = dates.length ? Math.max(...dates) : start;
   return Number.isFinite(latest) && Date.now() - latest >= days * 86_400_000;
+}
+
+function matchesCoordinationState(node: WorkNode, filters: Set<CoordinationStateFilter>, payload: PortalPayload) {
+  if (!filters.size) return true;
+  return [...filters].some((filter) => filter === "active" ? !["idea", "completed", "cancelled"].includes(node.lifecycle) : filter === "risk" ? coordinationAttentionReasons(payload, node).length > 0 : filter === "no_report_5d" ? lacksRecentReport(node) : node.lifecycle === filter);
 }
 
 const weekdayLabels = ["Неділя", "Понеділок", "Вівторок", "Середа", "Четвер", "П’ятниця", "Субота"];
@@ -418,6 +425,7 @@ function recalculateHierarchy(state: PortalState) {
     if (parent.lifecycleOverride) parent.lifecycle = parent.lifecycleOverride;
     else if (meaningful.length && meaningful.every((child) => child.lifecycle === "completed")) parent.lifecycle = "completed";
     else if (meaningful.some((child) => ["in_progress", "acceptance", "completed"].includes(child.lifecycle))) parent.lifecycle = "in_progress";
+    else if (meaningful.length && meaningful.every((child) => child.lifecycle === "idea")) parent.lifecycle = "idea";
     else if (meaningful.length && meaningful.every((child) => child.lifecycle === "ready")) parent.lifecycle = "ready";
     else if (meaningful.length && meaningful.every((child) => child.lifecycle === "paused")) parent.lifecycle = "paused";
     else parent.lifecycle = "planned";
@@ -444,7 +452,7 @@ function UserAvatar({ user, compact = false }: { user?: PortalUser; compact?: bo
 }
 
 function StatusBadge({ node }: { node: WorkNode }) {
-  return <span className={`health-badge ${node.health}`}>{node.health === "normal" ? lifecycleLabels[node.lifecycle] : healthLabels[node.health]}</span>;
+  return <span className={`health-badge ${node.health} lifecycle-${node.lifecycle}`}>{node.health === "normal" ? lifecycleLabels[node.lifecycle] : healthLabels[node.health]}</span>;
 }
 
 function LoginScreen({ initialError }: { initialError?: string }) {
@@ -728,7 +736,7 @@ export function PortalApp() {
     const activeNodes = payload.nodes.filter((node) => !node.archived);
     const tasks = activeNodes.filter((node) => node.kind === "task");
     const today = new Date().toISOString().slice(0, 10);
-    const overdue = tasks.filter((node) => node.lifecycle !== "completed" && node.plannedEnd && node.plannedEnd < today);
+    const overdue = tasks.filter((node) => !["idea", "completed", "cancelled"].includes(node.lifecycle) && node.plannedEnd && node.plannedEnd < today);
     const blocked = activeNodes.filter((node) => node.health === "blocked");
     const decisions = payload.decisions.filter((item) => item.status === "requested");
     const completed = tasks.filter((node) => node.lifecycle === "completed");
@@ -1030,7 +1038,7 @@ function DashboardView({ data, payload, userById, healthFilter, setHealthFilter,
     <PageIntro kicker="Єдиний керівницький екран" title="Результати, стани та управлінська реакція" text="Цілі, строки, блокери, рішення і навантаження зведені в одному дашборді. Детальна робота виконується в розділі «Моя робота»." />
     <div className="metric-grid">
       <button className="metric primary" onClick={() => firstGoal ? select(firstGoal.id) : openRegister("all")}><span>Стратегічні цілі</span><strong>{data.goals.length}</strong><small>{data.goals.filter((node) => node.health !== "normal").length} потребують уваги</small></button>
-      <button className="metric" onClick={() => openRegister("all")}><span>Активні завдання</span><strong>{data.tasks.filter((node) => !["completed", "cancelled"].includes(node.lifecycle)).length}</strong><small>{data.tasks.filter((node) => node.lifecycle === "acceptance").length} на прийманні</small></button>
+      <button className="metric" onClick={() => openRegister("all")}><span>Активні завдання</span><strong>{data.tasks.filter((node) => !["idea", "completed", "cancelled"].includes(node.lifecycle)).length}</strong><small>{data.tasks.filter((node) => node.lifecycle === "acceptance").length} на прийманні</small></button>
       <button className="metric danger" onClick={() => openRegister("blocked")}><span>Блокери</span><strong>{payload.blockers.filter((item) => item.status === "open").length}</strong><small>{data.decisions.length} рішень очікуються</small></button>
       <button className="metric warning" onClick={() => openRegister("overdue")}><span>Прострочені</span><strong>{data.overdue.length}</strong><small>за плановою датою</small></button>
     </div>
@@ -1082,7 +1090,7 @@ function CalendarView({ payload, userById, openNode }: { payload: PortalPayload;
   const monthEnd = `${month}-${String(new Date(year, monthNumber, 0).getDate()).padStart(2, "0")}`;
   const events: CalendarEvent[] = [];
   const add = (event: CalendarEvent) => { if (event.date >= monthStart && event.date <= monthEnd) events.push(event); };
-  for (const node of payload.nodes.filter((item) => !item.archived)) {
+  for (const node of payload.nodes.filter((item) => !item.archived && item.lifecycle !== "idea")) {
     if (node.plannedStart) add({ id: `${node.id}-start`, date: node.plannedStart, nodeId: node.id, ownerId: node.assigneeId, type: "start", title: `Початок: ${node.title}`, code: node.code });
     if (node.plannedEnd) add({ id: `${node.id}-deadline`, date: node.plannedEnd, nodeId: node.id, ownerId: node.assigneeId, type: "deadline", title: `Строк: ${node.title}`, code: node.code });
     if (node.forecastEnd && node.forecastEnd !== node.plannedEnd) add({ id: `${node.id}-forecast`, date: node.forecastEnd, nodeId: node.id, ownerId: node.assigneeId, type: "forecast", title: `Прогноз: ${node.title}`, code: node.code });
@@ -1142,7 +1150,7 @@ function TreeView(props: {
     const matchesQuery = !query || `${node.code} ${node.title} ${node.result}`.toLowerCase().includes(query);
     const matchesKind = kindFilter === "all" || node.kind === kindFilter;
     const matchesOwner = ownerFilter === "all" || node.ownerId === ownerFilter || node.assigneeId === ownerFilter;
-    const matchesState = stateFilter === "all" || stateFilter === "open" && node.lifecycle !== "completed" || stateFilter === "active" && !["completed", "cancelled"].includes(node.lifecycle) || stateFilter === "risk" && node.health !== "normal" || stateFilter === "completed" && node.lifecycle === "completed" || stateFilter === "no_report_5d" && lacksRecentReport(node);
+    const matchesState = stateFilter === "all" || stateFilter === "open" && node.lifecycle !== "completed" || stateFilter === "active" && !["idea", "completed", "cancelled"].includes(node.lifecycle) || stateFilter === "risk" && node.health !== "normal" || stateFilter === "completed" && node.lifecycle === "completed" || stateFilter === "no_report_5d" && lacksRecentReport(node);
     return matchesQuery && matchesKind && matchesOwner && matchesState;
   };
   const directMatches = treeNodes.filter(matchesFilters);
@@ -1317,7 +1325,7 @@ function MyWork({ payload, selected, selectedId, setSelectedId, initialFilter, f
   const incomingNodeIds = new Set([...pendingBlockers.map((item) => item.nodeId), ...pendingApprovals.map((item) => item.nodeId), ...pendingDecisions.map((item) => item.nodeId), ...pendingQuestions.map((item) => item.nodeId)]);
   const mine = payload.nodes.filter((node) => !node.archived && (node.ownerId === payload.currentUser.id || node.assigneeId === payload.currentUser.id || node.acceptorId === payload.currentUser.id || node.participantIds.includes(payload.currentUser.id) || incomingNodeIds.has(node.id)));
   const priorityOrder = { critical: 0, high: 1, normal: 2, low: 3 };
-  const filtered = mine.filter((node) => filter === "all" || filter === "action" && node.assigneeId === payload.currentUser.id && !["completed", "cancelled"].includes(node.lifecycle) || filter === "manage" && node.ownerId === payload.currentUser.id || filter === "acceptance" && node.acceptorId === payload.currentUser.id)
+  const filtered = mine.filter((node) => filter === "all" || filter === "action" && node.assigneeId === payload.currentUser.id && !["idea", "completed", "cancelled"].includes(node.lifecycle) || filter === "manage" && node.ownerId === payload.currentUser.id || filter === "acceptance" && node.acceptorId === payload.currentUser.id)
     .filter((node) => !listQuery.trim() || `${node.code} ${node.title} ${node.result}`.toLowerCase().includes(listQuery.trim().toLowerCase()))
     .filter((node) => levelFilter === "all" || node.kind === levelFilter)
     .filter((node) => lifecycleFilter === "all" || node.lifecycle === lifecycleFilter)
@@ -1537,10 +1545,17 @@ function DiscussionPanel({ node, payload, mutate, notify, userById }: { node: Wo
   </section>;
 }
 
+function CoordinationStateMultiSelect({ value, onChange }: { value: Set<CoordinationStateFilter>; onChange: (value: Set<CoordinationStateFilter>) => void }) {
+  const lifecycleOptions = Object.entries(lifecycleLabels) as Array<[LifecycleStatus, string]>;
+  const controlOptions: Array<[CoordinationStateFilter, string]> = [["active", "Активні об’єкти"], ["risk", "Потребує координації"], ["no_report_5d", "Немає звіту понад 5 днів"]];
+  const toggle = (item: CoordinationStateFilter) => { const next = new Set(value); if (next.has(item)) next.delete(item); else next.add(item); onChange(next); };
+  return <details className="coordination-state-multiselect"><summary><span>{value.size ? `Обрано станів: ${value.size}` : "Усі стани"}</span><i>⌄</i></summary><div><label className="all-states"><input type="checkbox" checked={!value.size} onChange={() => onChange(new Set())} /><span>Усі стани</span></label><strong>Статуси картки</strong>{lifecycleOptions.map(([item, label]) => <label key={item}><input type="checkbox" checked={value.has(item)} onChange={() => toggle(item)} /><span>{label}</span></label>)}<strong>Контрольні ознаки</strong>{controlOptions.map(([item, label]) => <label key={item}><input type="checkbox" checked={value.has(item)} onChange={() => toggle(item)} /><span>{label}</span></label>)}</div></details>;
+}
+
 function CoordinationView({ payload, userById, select, open }: { payload: PortalPayload; userById: (id: string) => PortalUser | undefined; select: (id: string) => void; open: (node: WorkNode) => void }) {
   const [query, setQuery] = useState("");
   const [ownerId, setOwnerId] = useState("all");
-  const [state, setState] = useState<"all" | "risk" | "active" | "completed" | "no_report_5d">("all");
+  const [stateFilters, setStateFilters] = useState<Set<CoordinationStateFilter>>(() => new Set());
   const [level, setLevel] = useState<"all" | NodeKind>("all");
   const [expandedRows, setExpandedRows] = useState<Set<string>>(() => new Set());
   const activeNodes = payload.nodes.filter((node) => !node.archived).sort(compareNodeCodes);
@@ -1552,20 +1567,19 @@ function CoordinationView({ payload, userById, select, open }: { payload: Portal
     const candidates = goal ? [goal, ...branch] : branch;
     const normalizedQuery = query.trim().toLowerCase();
     const matchesQuery = !normalizedQuery || candidates.some((item) => `${item.code} ${item.title}`.toLowerCase().includes(normalizedQuery));
-    const matchesExecutorAndState = candidates.some((item) => (level === "all" || item.kind === level) && (ownerId === "all" || item.assigneeId === ownerId)
-      && (state === "all" || state === "risk" && coordinationAttentionReasons(payload, item).length > 0 || state === "active" && !["completed", "cancelled"].includes(item.lifecycle) || state === "completed" && item.lifecycle === "completed" || state === "no_report_5d" && lacksRecentReport(item)));
+    const matchesExecutorAndState = candidates.some((item) => (level === "all" || item.kind === level) && (ownerId === "all" || item.assigneeId === ownerId) && matchesCoordinationState(item, stateFilters, payload));
     return matchesQuery && matchesExecutorAndState;
   });
   const scopeIds = new Set(units.flatMap(({ node, branch }) => [...nodePath(payload.nodes, node).map((item) => item.id), ...branch.map((item) => item.id)]));
   const attentionNodes = activeNodes.map((node) => ({ node, reasons: coordinationAttentionReasons(payload, node) })).filter(({ node, reasons }) => scopeIds.has(node.id) && reasons.length && (level === "all" || node.kind === level) && (ownerId === "all" || node.assigneeId === ownerId));
-  const filtersActive = Boolean(query.trim() || level !== "all" || ownerId !== "all" || state !== "all");
+  const filtersActive = Boolean(query.trim() || level !== "all" || ownerId !== "all" || stateFilters.size);
   const tableIds = new Set<string>();
   const matchesTableFilter = (node: WorkNode) => {
     const normalizedQuery = query.trim().toLowerCase();
     return (!normalizedQuery || `${node.code} ${node.title} ${node.result}`.toLowerCase().includes(normalizedQuery))
       && (level === "all" || node.kind === level)
       && (ownerId === "all" || node.assigneeId === ownerId)
-      && (state === "all" || state === "risk" && coordinationAttentionReasons(payload, node).length > 0 || state === "active" && !["completed", "cancelled"].includes(node.lifecycle) || state === "completed" && node.lifecycle === "completed" || state === "no_report_5d" && lacksRecentReport(node));
+      && matchesCoordinationState(node, stateFilters, payload);
   };
   for (const { goal, branch } of units) {
     for (const node of goal ? [goal, ...branch] : branch) {
@@ -1606,7 +1620,7 @@ function CoordinationView({ payload, userById, select, open }: { payload: Portal
       {opened && reports.map((report) => <div className="coordination-report-row" key={report.id} style={{ "--coord-depth": depth + 1 } as React.CSSProperties}><div><span>{new Date(report.createdAt).toLocaleString("uk-UA")}</span><strong>{report.summary}</strong><small>{userById(report.createdBy)?.name || "Asana"}</small></div><span>{lifecycleLabels[report.lifecycle]}</span><span>{report.progress}%</span><span>{report.forecastEnd ? dateLabel(report.forecastEnd) : "Без прогнозу"}</span><p>{report.nextAction || "Наступну дію не вказано"}</p></div>)}
     </div>;
   };
-  return <><PageIntro kicker="Одиниця координації" title="Координація за управлінськими циклами" text="Предмет координації — зведений стан усіх завдань циклу з розрізом за підциклами, строками, блокерами, рішеннями та прийманням." actions={<div className="page-filter-bar coordination-filter-bar"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Пошук цілі, циклу, підциклу або завдання…" /><select value={level} onChange={(event) => setLevel(event.target.value as typeof level)}><option value="all">Усі рівні</option><option value="goal">Цілі</option><option value="cycle">Цикли</option><option value="subcycle">Підцикли</option><option value="task">Завдання</option></select><select value={ownerId} onChange={(event) => setOwnerId(event.target.value)}><option value="all">Усі виконавці</option>{payload.users.filter((user) => user.active).map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select><select value={state} onChange={(event) => setState(event.target.value as typeof state)}><option value="all">Усі стани</option><option value="active">Активні об’єкти</option><option value="risk">Потребує координації</option><option value="no_report_5d">Немає звіту понад 5 днів</option><option value="completed">Завершені об’єкти</option></select></div>} />
+  return <><PageIntro kicker="Одиниця координації" title="Координація за управлінськими циклами" text="Предмет координації — зведений стан усіх завдань циклу з розрізом за підциклами, строками, блокерами, рішеннями та прийманням." actions={<div className="page-filter-bar coordination-filter-bar"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Пошук цілі, циклу, підциклу або завдання…" /><select value={level} onChange={(event) => setLevel(event.target.value as typeof level)}><option value="all">Усі рівні</option><option value="goal">Цілі</option><option value="cycle">Цикли</option><option value="subcycle">Підцикли</option><option value="task">Завдання</option></select><select value={ownerId} onChange={(event) => setOwnerId(event.target.value)}><option value="all">Усі виконавці</option>{payload.users.filter((user) => user.active).map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select><CoordinationStateMultiSelect value={stateFilters} onChange={setStateFilters} /></div>} />
     <section className="panel coordination-attention"><div className="panel-head"><div><span>Контроль і реакція</span><h2>Потребує координації</h2></div><b className="count amber">{attentionNodes.length}</b></div><div className="coordination-attention-table"><div className="coordination-attention-head"><span>Об’єкт</span><span>Причини</span><span>Відповідальний</span><span>Строк</span></div>{attentionNodes.map(({ node, reasons }) => <button key={node.id} onClick={() => select(node.id)}><div><span>{node.code} · {kindLabels[node.kind]}</span><strong>{node.title}</strong></div><div>{reasons.map((reason) => <span key={reason}>{reason}</span>)}</div><span>{userById(node.assigneeId)?.name || "—"}</span><time>{dateLabel(node.plannedEnd)}</time></button>)}{!attentionNodes.length && <p className="empty-state padded">За вибраними фільтрами немає об’єктів, що потребують координації.</p>}</div></section>
     <section className="panel coordination-tree-table"><div className="panel-head"><div><span>Зведена звітність циклів</span><h2>Стратегічна ціль → управлінський цикл → підцикл → завдання → три останні звіти</h2></div><div className="coordination-tree-controls"><button className={structureExpanded ? "active" : ""} onClick={toggleStructure}>{structureExpanded ? "Згорнути рівні" : "Розгорнути рівні"}</button><button className={reportsExpanded ? "active" : ""} disabled={!reportIds.length} onClick={toggleReports}>{reportsExpanded ? "Сховати звіти" : "Показати звіти"}</button><button className={everythingExpanded ? "active" : ""} disabled={!allExpandableIds.length} onClick={toggleEverything}>{everythingExpanded ? "Згорнути все" : "Розгорнути все"}</button><b className="count">{units.length}</b></div></div><div className="coordination-tree-head"><span>Об’єкт управління</span><span>Відповідальний</span><span>Статус</span><span>Прогрес</span><span>Строк</span><span>Увага / дія</span></div><div className="coordination-tree-body">{goals.map((goal) => renderCoordinationRow(goal))}{orphanCycles.map((cycle) => renderCoordinationRow(cycle))}{!units.length && <p className="empty-state padded">За вибраними фільтрами управлінських циклів немає.</p>}</div></section>
   </>;
@@ -1622,8 +1636,8 @@ function RiskRegisters({ payload, userById, openWork }: { payload: PortalPayload
 
 function ReportAnalytics({ payload, data, userById, healthFilter, setHealthFilter, query, ownerId, openWork }: { payload: PortalPayload; data: ComputedData; userById: (id: string) => PortalUser | undefined; healthFilter: "all" | HealthStatus | "overdue" | "decision"; setHealthFilter: (value: "all" | HealthStatus | "overdue" | "decision") => void; query: string; ownerId: string; openWork: (id: string) => void }) {
   const today = new Date().toISOString().slice(0, 10);
-  const filtered = data.tasks.filter((node) => (healthFilter === "all" || node.health === healthFilter || (healthFilter === "overdue" && node.plannedEnd < today && node.lifecycle !== "completed") || (healthFilter === "decision" && node.decisionRequired)) && (ownerId === "all" || node.ownerId === ownerId || node.assigneeId === ownerId) && (!query.trim() || `${node.code} ${node.title} ${node.result}`.toLowerCase().includes(query.trim().toLowerCase())));
-  const perUser = payload.users.filter((user) => user.active).map((user) => ({ user, tasks: data.tasks.filter((node) => node.assigneeId === user.id && node.lifecycle !== "completed"), blocked: data.tasks.filter((node) => node.assigneeId === user.id && node.health === "blocked").length }));
+  const filtered = data.tasks.filter((node) => (healthFilter === "all" || node.health === healthFilter || (healthFilter === "overdue" && node.plannedEnd < today && !["idea", "completed", "cancelled"].includes(node.lifecycle)) || (healthFilter === "decision" && node.decisionRequired)) && (ownerId === "all" || node.ownerId === ownerId || node.assigneeId === ownerId) && (!query.trim() || `${node.code} ${node.title} ${node.result}`.toLowerCase().includes(query.trim().toLowerCase())));
+  const perUser = payload.users.filter((user) => user.active).map((user) => ({ user, tasks: data.tasks.filter((node) => node.assigneeId === user.id && !["idea", "completed", "cancelled"].includes(node.lifecycle)), blocked: data.tasks.filter((node) => node.assigneeId === user.id && node.health === "blocked").length }));
   const exportCsv = () => {
     const rows = [["Код", "Завдання", "Виконавець", "Стан", "Прогрес", "Плановий строк"], ...filtered.map((node) => [node.code, node.title, userById(node.assigneeId)?.name || "", healthLabels[node.health], String(node.progress), node.plannedEnd])];
     const csv = `\ufeff${rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(";")).join("\n")}`;
@@ -1633,7 +1647,7 @@ function ReportAnalytics({ payload, data, userById, healthFilter, setHealthFilte
   return <><div className="dashboard-actions"><button className="secondary" onClick={() => window.print()}>Друк / PDF</button><button className="primary" onClick={exportCsv}>Вивантажити таблицю</button></div>
     <div className="report-metrics"><article><span>Виконання у строк</span><strong>{data.onTimeRate}%</strong><small>серед завершених задач</small></article><article><span>Приймання з першого разу</span><strong>{data.firstPassRate}%</strong><small>{data.returnedCount} повернень</small></article><article><span>Середній прогрес задач</span><strong>{data.tasks.length ? Math.round(data.tasks.reduce((sum, node) => sum + node.progress, 0) / data.tasks.length) : 0}%</strong><small>не замінює результат цілі</small></article><article><span>Відкриті рішення</span><strong>{data.decisions.length}</strong><small>із визначеним адресатом</small></article></div>
     <div className="report-grid"><section className="panel"><div className="panel-head"><div><span>Навантаження</span><h2>Активні задачі за виконавцями</h2></div></div><div className="bar-chart">{perUser.map(({ user, tasks, blocked }) => <div className="bar-row" key={user.id}><div><UserAvatar user={user} compact /><span>{user.name}</span></div><i><b style={{ width: `${Math.min(100, tasks.length * 20)}%` }} /></i><strong>{tasks.length}</strong>{blocked > 0 && <em>{blocked} бл.</em>}</div>)}</div></section>
-      <section className="panel"><div className="panel-head"><div><span>Стани</span><h2>Розподіл завдань</h2></div></div><div className="distribution">{(["planned", "ready", "in_progress", "acceptance", "completed"] as LifecycleStatus[]).map((status) => { const count = data.tasks.filter((node) => node.lifecycle === status).length; return <div key={status}><span>{lifecycleLabels[status]}</span><i><b style={{ width: `${data.tasks.length ? count / data.tasks.length * 100 : 0}%` }} /></i><strong>{count}</strong></div>; })}</div></section></div>
+      <section className="panel"><div className="panel-head"><div><span>Стани</span><h2>Розподіл завдань</h2></div></div><div className="distribution">{(["idea", "draft", "planned", "ready", "in_progress", "acceptance", "completed"] as LifecycleStatus[]).map((status) => { const count = data.tasks.filter((node) => node.lifecycle === status).length; return <div key={status}><span>{lifecycleLabels[status]}</span><i><b style={{ width: `${data.tasks.length ? count / data.tasks.length * 100 : 0}%` }} /></i><strong>{count}</strong></div>; })}</div></section></div>
     <section id="control-register" className="panel report-table"><div className="report-filter"><div><h2>Контрольний реєстр</h2><span>{filtered.length} завдань</span></div><div>{(["all", "blocked", "risk", "overdue", "decision"] as const).map((filter) => <button key={filter} className={healthFilter === filter ? "active" : ""} onClick={() => setHealthFilter(filter)}>{filter === "all" ? "Усі" : filter === "blocked" ? "Блокери" : filter === "risk" ? "Ризик" : filter === "overdue" ? "Прострочені" : "Потрібне рішення"}</button>)}</div></div><div className="table-wrap"><table><thead><tr><th>Код</th><th>Завдання</th><th>Виконавець</th><th>Стан</th><th>Прогрес</th><th>Строк</th></tr></thead><tbody>{filtered.map((node) => <tr key={node.id}><td><button className="table-node-link" onClick={() => openWork(node.id)}>{node.code}</button></td><td><button className="table-title-link" onClick={() => openWork(node.id)}>{node.title}</button></td><td>{userById(node.assigneeId)?.name}</td><td><StatusBadge node={node} /></td><td>{node.progress}%</td><td>{dateLabel(node.plannedEnd)}</td></tr>)}</tbody></table></div></section>
   </>;
 }

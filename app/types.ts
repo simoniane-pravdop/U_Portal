@@ -1,6 +1,7 @@
 export type NodeKind = "goal" | "cycle" | "subcycle" | "task";
 export type LifecycleStatus =
   | "draft"
+  | "idea"
   | "planned"
   | "ready"
   | "in_progress"

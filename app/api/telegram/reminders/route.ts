@@ -17,7 +17,7 @@ export async function POST(request: Request) {
   const timezone = state.settings.timezone || "Europe/Kyiv";
   const today = dateInZone(new Date(), timezone);
   const tomorrow = dateInZone(new Date(Date.now() + 86_400_000), timezone);
-  const candidates = state.nodes.filter((node) => node.kind === "task" && !node.archived && !["completed", "cancelled"].includes(node.lifecycle) && node.plannedEnd && node.plannedEnd <= tomorrow);
+  const candidates = state.nodes.filter((node) => node.kind === "task" && !node.archived && !["idea", "completed", "cancelled"].includes(node.lifecycle) && node.plannedEnd && node.plannedEnd <= tomorrow);
   let sent = 0;
   for (const node of candidates) {
     const link = await db.prepare("SELECT chat_id FROM telegram_links WHERE user_id = ? AND active = 1").bind(node.assigneeId).first<{ chat_id: string }>();

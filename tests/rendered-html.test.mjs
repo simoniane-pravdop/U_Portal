@@ -218,6 +218,12 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /Керівник вищої ланки/);
   assert.match(source, /branchHasOpenBlocker/);
   assert.match(source, /HealthOverrideFields/);
+  assert.match(source, /idea: "Ідея"/);
+  assert.match(source, /CoordinationStateMultiSelect/);
+  assert.match(source, /Обрано станів/);
+  assert.match(source, /Статуси картки/);
+  assert.match(source, /Контрольні ознаки/);
+  assert.match(source, /\["idea", "completed", "cancelled"\]/);
   assert.match(source, /healthOverride/);
   assert.match(source, /healthComment/);
   assert.match(source, /Додайте пояснення ризику або блокера/);
@@ -320,6 +326,9 @@ test("compact laptop and mobile layouts are declared", async () => {
   assert.match(css, /\.coordination-report-row > div strong.*font-weight: 400/);
   assert.match(css, /\.notification-list article strong/);
   assert.match(css, /\.inbox-actions button strong/);
+  assert.match(css, /\.coordination-state-multiselect/);
+  assert.match(css, /\.coordination-attention-table > button > div:first-child strong/);
+  assert.match(css, /\.health-badge\.normal\.lifecycle-idea/);
   assert.match(css, /\.tree-work-snapshot/);
   assert.match(css, /\.tree-snapshot-summary/);
   assert.match(css, /\.detail-columns\.info-only > aside \{ display: none !important/);
