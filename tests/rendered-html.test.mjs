@@ -140,7 +140,7 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /firstAvailableNumber/);
   assert.match(source, /Intl\.Collator\("uk", \{ numeric: true/);
   assert.match(source, /sort\(compareNodeCodes\)/);
-  assert.match(source, /useState<"open" \| "all" \| "active" \| "risk" \| "completed">\("open"\)/);
+  assert.match(source, /useState<"open" \| "all" \| "active" \| "risk" \| "completed" \| "no_report_5d">\("open"\)/);
   assert.match(source, /Усі без завершених/);
   assert.match(source, /treeMode.*archive/);
   assert.match(source, /Перемістити в архів/);
@@ -225,7 +225,12 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /item\.health === "blocked" \|\| item\.health === "risk"/);
   assert.match(source, /filter === "manage" && node\.ownerId === payload\.currentUser\.id/);
   assert.match(source, /filter === "acceptance"/);
-  assert.match(source, /workHealthFilter === "branch_blocker" \? branchHasOpenBlocker/);
+  assert.match(source, /workFilterForUser/);
+  assert.ok(source.indexOf("node.ownerId === user.id") < source.indexOf("node.acceptorId === user.id"));
+  assert.match(source, /node\.participantIds\.includes\(payload\.currentUser\.id\)/);
+  assert.match(source, /lacksRecentReport/);
+  assert.match(source, /Немає звіту понад 5 днів/);
+  assert.match(source, /workHealthFilter === "branch_blocker" && branchHasOpenBlocker/);
   assert.match(source, /value="branch_blocker">Блокери/);
   assert.match(source, /filtered\.some\(\(node\) => node\.id === selectedNode\.id\)/);
   assert.match(source, /За вибраним фільтром карток немає/);
@@ -303,6 +308,8 @@ test("compact laptop and mobile layouts are declared", async () => {
   assert.match(css, /\.coordination-tree-branch\.level-goal/);
   assert.match(css, /\.coordination-tree-branch\.level-subcycle/);
   assert.match(css, /\.coordination-tree-branch\.level-task/);
+  assert.match(css, /\.notification-list article strong/);
+  assert.match(css, /\.inbox-actions button strong/);
   assert.match(css, /\.tree-work-snapshot/);
   assert.match(css, /\.tree-snapshot-summary/);
   assert.match(css, /\.detail-columns\.info-only > aside \{ display: none !important/);

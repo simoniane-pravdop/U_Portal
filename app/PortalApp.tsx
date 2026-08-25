@@ -69,6 +69,13 @@ const roleLabels: Record<string, string> = {
   executor: "Виконавець",
   viewer: "Спостерігач",
 };
+function workFilterForUser(node: WorkNode | undefined, user: PortalUser): WorkFilter {
+  if (!node) return "all";
+  if (node.ownerId === user.id) return "manage";
+  if (node.acceptorId === user.id) return "acceptance";
+  if (node.assigneeId === user.id) return "action";
+  return "all";
+}
 const nav: Array<{ id: View; label: string; hint: string; icon: string }> = [
   { id: "dashboard", label: "Дашборд", hint: "Результати й відхилення", icon: "▦" },
   { id: "inbox", label: "Вхідні", hint: "Сповіщення та звернення", icon: "●" },
@@ -105,6 +112,7 @@ function coordinationAttentionReasons(payload: PortalPayload, node: WorkNode) {
   if (payload.acceptances.some((item) => item.nodeId === node.id && item.status === "submitted") || node.lifecycle === "acceptance") reasons.add("Результат не прийнято");
   if (node.kind === "task" && node.lifecycle === "completed" && !payload.acceptances.some((item) => item.nodeId === node.id && item.status === "accepted")) reasons.add("Завершено без приймання");
   if (node.plannedEnd && node.plannedEnd < today && !["completed", "cancelled"].includes(node.lifecycle)) reasons.add("Прострочений строк");
+  if (lacksRecentReport(node)) reasons.add("Немає звіту понад 5 днів");
   if (node.kind === "cycle" && !descendants(payload.nodes.filter((item) => !item.archived), node.id).some((item) => item.kind === "task")) reasons.add("Цикл без завдань");
   return [...reasons];
 }
@@ -113,6 +121,14 @@ function branchHasOpenBlocker(payload: PortalPayload, node: WorkNode) {
   const branch = descendants(payload.nodes.filter((item) => !item.archived), node.id);
   const ids = new Set(branch.map((item) => item.id));
   return branch.some((item) => item.health === "blocked" || item.health === "risk") || payload.blockers.some((blocker) => blocker.status === "open" && ids.has(blocker.nodeId));
+}
+
+function lacksRecentReport(node: WorkNode, days = 5) {
+  if (node.kind !== "task" || ["completed", "cancelled"].includes(node.lifecycle)) return false;
+  const dates = (node.updates || []).map((item) => new Date(item.createdAt).getTime()).filter(Number.isFinite);
+  const start = node.actualStart ? new Date(`${node.actualStart}T12:00:00`).getTime() : new Date(node.createdAt).getTime();
+  const latest = dates.length ? Math.max(...dates) : start;
+  return Number.isFinite(latest) && Date.now() - latest >= days * 86_400_000;
 }
 
 const weekdayLabels = ["Неділя", "Понеділок", "Вівторок", "Середа", "Четвер", "П’ятниця", "Субота"];
@@ -535,7 +551,11 @@ export function PortalApp() {
         const requestedView = new URLSearchParams(window.location.search).get("view") as View | null;
         if (requestedView && nav.some((item) => item.id === requestedView)) setView(requestedView);
         const requestedNode = new URLSearchParams(window.location.search).get("node");
-        if (requestedNode && data.nodes.some((node) => node.id === requestedNode && !node.archived)) setSelectedId(requestedNode);
+        const requestedWorkNode = requestedNode ? data.nodes.find((node) => node.id === requestedNode && !node.archived) : undefined;
+        if (requestedWorkNode) {
+          setSelectedId(requestedWorkNode.id);
+          if (requestedView === "my") setWorkEntryFilter(workFilterForUser(requestedWorkNode, data.currentUser));
+        }
         window.requestAnimationFrame(() => { urlSyncReadyRef.current = true; });
       })
       .catch((error) => setLoadError(error.message));
@@ -730,6 +750,7 @@ export function PortalApp() {
   const selected = payload.nodes.find((node) => node.id === selectedId && (!node.archived || view === "tree")) || payload.nodes.find((node) => !node.archived);
   const canManage = ["owner", "admin", "goal_owner", "cycle_owner", "coordinator"].includes(payload.currentUser.role);
   const logout = async () => { await fetch("/api/auth/logout", { method: "POST" }); window.location.reload(); };
+  const openNodeInWork = (node: WorkNode, focus: WorkFocus = null) => { setSelectedId(node.id); setWorkEntryFilter(workFilterForUser(node, payload.currentUser)); setWorkEntryFocus(focus); setView("my"); };
   const copyNodeLink = async (node: WorkNode, targetView: View) => {
     const url = new URL(window.location.origin);
     url.searchParams.set("view", targetView);
@@ -952,16 +973,16 @@ export function PortalApp() {
 
       <section className="workspace">
         <div className="content" id="main-content">
-          {view === "dashboard" && <DashboardView data={data} payload={payload} userById={userById} healthFilter={healthFilter} setHealthFilter={setHealthFilter} select={(id) => { setSelectedId(id); setView("tree"); }} openWork={(id) => { setSelectedId(id); setWorkEntryFilter("all"); setWorkEntryFocus(null); setView("my"); }} />}
+          {view === "dashboard" && <DashboardView data={data} payload={payload} userById={userById} healthFilter={healthFilter} setHealthFilter={setHealthFilter} select={(id) => { setSelectedId(id); setView("tree"); }} openWork={(id) => { const node = payload.nodes.find((item) => item.id === id); if (node) openNodeInWork(node); }} />}
           {view === "inbox" && <NotificationsView payload={payload} userById={userById} mutate={mutate} openNode={(id, nextFilter, focus) => { setSelectedId(id); setWorkEntryFilter(nextFilter); setWorkEntryFocus(focus); setView("my"); }} />}
-          {view === "calendar" && <CalendarView payload={payload} userById={userById} openNode={(id) => { setSelectedId(id); setView("my"); }} />}
+          {view === "calendar" && <CalendarView payload={payload} userById={userById} openNode={(id) => { const node = payload.nodes.find((item) => item.id === id); if (node) openNodeInWork(node); }} />}
           {view === "tree" && (
             <TreeView
               payload={payload} selected={selected} selectedId={selectedId} setSelectedId={setSelectedId}
               search={search} setSearch={setSearch} userById={userById} canManage={canManage}
               locks={locks}
               openCreateKind={openCreateKind} openEdit={openEdit}
-              openWork={(node) => { setSelectedId(node.id); setView("my"); }}
+              openWork={(node) => openNodeInWork(node)}
               mutate={mutate} copyNodeLink={copyNodeLink}
             />
           )}
@@ -1103,7 +1124,7 @@ function TreeView(props: {
   const [mobilePane, setMobilePane] = useState<"tree" | "card">("tree");
   const [kindFilter, setKindFilter] = useState<"all" | NodeKind>("all");
   const [ownerFilter, setOwnerFilter] = useState("all");
-  const [stateFilter, setStateFilter] = useState<"open" | "all" | "active" | "risk" | "completed">("open");
+  const [stateFilter, setStateFilter] = useState<"open" | "all" | "active" | "risk" | "completed" | "no_report_5d">("open");
   const [treeMode, setTreeMode] = useState<"active" | "archive">("active");
   const treeNodes = payload.nodes.filter((node) => treeMode === "archive" ? node.archived : !node.archived).sort(compareNodeCodes);
   const query = search.trim().toLowerCase();
@@ -1111,7 +1132,7 @@ function TreeView(props: {
     const matchesQuery = !query || `${node.code} ${node.title} ${node.result}`.toLowerCase().includes(query);
     const matchesKind = kindFilter === "all" || node.kind === kindFilter;
     const matchesOwner = ownerFilter === "all" || node.ownerId === ownerFilter || node.assigneeId === ownerFilter;
-    const matchesState = stateFilter === "all" || stateFilter === "open" && node.lifecycle !== "completed" || stateFilter === "active" && !["completed", "cancelled"].includes(node.lifecycle) || stateFilter === "risk" && node.health !== "normal" || stateFilter === "completed" && node.lifecycle === "completed";
+    const matchesState = stateFilter === "all" || stateFilter === "open" && node.lifecycle !== "completed" || stateFilter === "active" && !["completed", "cancelled"].includes(node.lifecycle) || stateFilter === "risk" && node.health !== "normal" || stateFilter === "completed" && node.lifecycle === "completed" || stateFilter === "no_report_5d" && lacksRecentReport(node);
     return matchesQuery && matchesKind && matchesOwner && matchesState;
   };
   const directMatches = treeNodes.filter(matchesFilters);
@@ -1213,7 +1234,7 @@ function TreeView(props: {
       <aside className="tree-catalog">
         <div className="catalog-head">{!treeCompact && <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Пошук у дереві…" />}<span>{filtered.length}</span><button className="tree-compact-toggle" onClick={() => setTreeCompact((value) => !value)} title={treeCompact ? "Розгорнути дерево" : "Згорнути дерево до кодів"} aria-label={treeCompact ? "Розгорнути дерево" : "Згорнути дерево до кодів"}>{treeCompact ? "→" : "К"}</button></div>
         {!treeCompact && <div className="tree-mode-switch" role="tablist"><button role="tab" aria-selected={treeMode === "active"} className={treeMode === "active" ? "active" : ""} onClick={() => switchTreeMode("active")}>Робоче дерево</button><button role="tab" aria-selected={treeMode === "archive"} className={treeMode === "archive" ? "active" : ""} onClick={() => switchTreeMode("archive")}>Архів · {payload.nodes.filter((node) => node.archived).length}</button></div>}
-        {!treeCompact && <div className="compact-filters"><select value={kindFilter} onChange={(event) => setKindFilter(event.target.value as "all" | NodeKind)}><option value="all">Усі рівні</option><option value="goal">Цілі</option><option value="cycle">Цикли</option><option value="subcycle">Підцикли</option><option value="task">Завдання</option></select><select value={ownerFilter} onChange={(event) => setOwnerFilter(event.target.value)}><option value="all">Усі відповідальні</option>{payload.users.filter((user) => user.active).map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select><select value={stateFilter} onChange={(event) => setStateFilter(event.target.value as typeof stateFilter)}><option value="open">Усі без завершених</option><option value="all">Усі стани</option><option value="active">Активні</option><option value="risk">Ризик / блокер</option><option value="completed">Завершені</option></select></div>}
+        {!treeCompact && <div className="compact-filters"><select value={kindFilter} onChange={(event) => setKindFilter(event.target.value as "all" | NodeKind)}><option value="all">Усі рівні</option><option value="goal">Цілі</option><option value="cycle">Цикли</option><option value="subcycle">Підцикли</option><option value="task">Завдання</option></select><select value={ownerFilter} onChange={(event) => setOwnerFilter(event.target.value)}><option value="all">Усі відповідальні</option>{payload.users.filter((user) => user.active).map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select><select value={stateFilter} onChange={(event) => setStateFilter(event.target.value as typeof stateFilter)}><option value="open">Усі без завершених</option><option value="no_report_5d">Немає звіту понад 5 днів</option><option value="all">Усі стани</option><option value="active">Активні</option><option value="risk">Ризик / блокер</option><option value="completed">Завершені</option></select></div>}
         <div className={`tree-scroll ${flatLevelResults ? "flat-filter-results" : ""}`}>{flatLevelResults ? filtered.map(renderFlatResult) : renderBranch(null)}{!filtered.length && <p className="empty-state padded">{treeMode === "archive" ? "В архіві немає об’єктів за вибраними фільтрами." : flatLevelResults ? "За вибраними фільтрами об’єктів цього рівня немає." : "Дерево порожнє. Створіть першу стратегічну ціль."}</p>}</div>
         {!treeCompact && <button type="button" className="tree-width-handle" aria-label={`Змінити ширину навігації дерева, зараз ${treeWidth} пікселів`} title="Перетягніть для зміни ширини · стрілки — крок 20 пікселів · подвійне натискання — стандартна ширина" onPointerDown={startTreeResize} onKeyDown={(event) => { if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return; event.preventDefault(); const next = Math.max(220, Math.min(560, treeWidth + (event.key === "ArrowRight" ? 20 : -20))); setTreeWidth(next); window.localStorage.setItem("portal:tree-navigation-width", String(next)); }} onDoubleClick={() => { setTreeWidth(300); window.localStorage.setItem("portal:tree-navigation-width", "300"); }} />}
       </aside>
@@ -1255,7 +1276,7 @@ function NotificationsView({ payload, userById, mutate, openNode }: { payload: P
   const pendingQuestions = (payload.discussions || []).filter((item) => !item.deletedAt && (item.kind === "question" || item.requiresResponse) && !item.resolvedAt && item.recipientId === payload.currentUser.id);
   const markRead = (notification: PortalNotification) => notification.readAt ? Promise.resolve(true) : mutate("Сповіщення прочитано", notification.id, (state) => { const item = state.notifications.find((candidate) => candidate.id === notification.id); if (item) item.readAt = isoNow(); });
   const markAllRead = () => mutate("Сповіщення прочитано всі", payload.currentUser.id, (state) => { for (const item of state.notifications) if (item.userId === payload.currentUser.id && !item.readAt) item.readAt = isoNow(); });
-  const routeFor = (nodeId: string): WorkFilter => { const node = payload.nodes.find((item) => item.id === nodeId); return node?.acceptorId === payload.currentUser.id ? "acceptance" : node?.ownerId === payload.currentUser.id ? "manage" : node?.assigneeId === payload.currentUser.id ? "action" : "all"; };
+  const routeFor = (nodeId: string): WorkFilter => workFilterForUser(payload.nodes.find((item) => item.id === nodeId), payload.currentUser);
   const open = async (notification: PortalNotification) => {
     await markRead(notification);
     if (!notification.nodeId || !payload.nodes.some((node) => node.id === notification.nodeId && !node.archived)) return;
@@ -1277,7 +1298,7 @@ function MyWork({ payload, selected, selectedId, setSelectedId, initialFilter, f
   const [sort, setSort] = useState<"deadline" | "priority" | "updated" | "progress">("deadline");
   const [levelFilter, setLevelFilter] = useState<"all" | NodeKind>("all");
   const [lifecycleFilter, setLifecycleFilter] = useState<"all" | LifecycleStatus>("all");
-  const [workHealthFilter, setWorkHealthFilter] = useState<"all" | HealthStatus | "branch_blocker">("all");
+  const [workHealthFilter, setWorkHealthFilter] = useState<"all" | HealthStatus | "branch_blocker" | "no_report_5d">("all");
   const [priorityFilter, setPriorityFilter] = useState<"all" | WorkNode["priority"]>("all");
   const pendingApprovals = payload.acceptances.filter((item) => item.status === "submitted" && item.acceptorId === payload.currentUser.id);
   const pendingDecisions = payload.decisions.filter((item) => item.status === "requested" && item.decisionOwnerId === payload.currentUser.id);
@@ -1290,7 +1311,7 @@ function MyWork({ payload, selected, selectedId, setSelectedId, initialFilter, f
     .filter((node) => !listQuery.trim() || `${node.code} ${node.title} ${node.result}`.toLowerCase().includes(listQuery.trim().toLowerCase()))
     .filter((node) => levelFilter === "all" || node.kind === levelFilter)
     .filter((node) => lifecycleFilter === "all" || node.lifecycle === lifecycleFilter)
-    .filter((node) => workHealthFilter === "all" || (workHealthFilter === "branch_blocker" ? branchHasOpenBlocker(payload, node) : node.health === workHealthFilter))
+    .filter((node) => workHealthFilter === "all" || workHealthFilter === "branch_blocker" && branchHasOpenBlocker(payload, node) || workHealthFilter === "no_report_5d" && lacksRecentReport(node) || node.health === workHealthFilter)
     .filter((node) => priorityFilter === "all" || node.priority === priorityFilter)
     .sort((a, b) => sort === "deadline" ? (a.plannedEnd || "9999").localeCompare(b.plannedEnd || "9999") : sort === "priority" ? priorityOrder[a.priority] - priorityOrder[b.priority] : sort === "progress" ? a.progress - b.progress : b.updatedAt.localeCompare(a.updatedAt));
   const selectedNode = payload.nodes.find((node) => node.id === selectedId && !node.archived) || selected;
@@ -1329,7 +1350,7 @@ function MyWork({ payload, selected, selectedId, setSelectedId, initialFilter, f
       <aside className="work-inbox">
         <div className="work-filter">{(["action", "manage", "acceptance", "all"] as const).map((item) => <button key={item} className={filter === item ? "active" : ""} onClick={() => setFilter(item)}>{item === "action" ? "Мої дії" : item === "manage" ? "Координую" : item === "acceptance" ? "Приймаю" : "Усі"}</button>)}</div>
         <div className="work-list-controls"><input value={listQuery} onChange={(event) => setListQuery(event.target.value)} placeholder="Пошук…" /><select value={sort} onChange={(event) => setSort(event.target.value as typeof sort)}><option value="deadline">За строком</option><option value="priority">За пріоритетом</option><option value="updated">За оновленням</option><option value="progress">За прогресом</option></select></div>
-        <details className="work-advanced-filters"><summary><span>Рівень, статус і стан</span>{activeFilterCount > 0 && <b>{activeFilterCount}</b>}<i>⌄</i></summary><div><label><span>Рівень</span><select value={levelFilter} onChange={(event) => setLevelFilter(event.target.value as typeof levelFilter)}><option value="all">Усі рівні</option><option value="goal">Цілі</option><option value="cycle">Цикли</option><option value="subcycle">Підцикли</option><option value="task">Завдання</option></select></label><label><span>Статус</span><select value={lifecycleFilter} onChange={(event) => setLifecycleFilter(event.target.value as typeof lifecycleFilter)}><option value="all">Усі статуси</option>{Object.entries(lifecycleLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label><span>Стан</span><select value={workHealthFilter} onChange={(event) => setWorkHealthFilter(event.target.value as typeof workHealthFilter)}><option value="all">Будь-який стан</option><option value="branch_blocker">Блокери</option><option value="normal">Нормально</option><option value="risk">Є ризик</option><option value="blocked">Заблоковано</option></select></label><label><span>Пріоритет</span><select value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value as typeof priorityFilter)}><option value="all">Усі пріоритети</option><option value="critical">Критичний</option><option value="high">Високий</option><option value="normal">Нормальний</option><option value="low">Низький</option></select></label><button type="button" disabled={!activeFilterCount} onClick={resetListFilters}>Скинути фільтри</button></div></details>
+        <details className="work-advanced-filters"><summary><span>Рівень, статус і стан</span>{activeFilterCount > 0 && <b>{activeFilterCount}</b>}<i>⌄</i></summary><div><label><span>Рівень</span><select value={levelFilter} onChange={(event) => setLevelFilter(event.target.value as typeof levelFilter)}><option value="all">Усі рівні</option><option value="goal">Цілі</option><option value="cycle">Цикли</option><option value="subcycle">Підцикли</option><option value="task">Завдання</option></select></label><label><span>Статус</span><select value={lifecycleFilter} onChange={(event) => setLifecycleFilter(event.target.value as typeof lifecycleFilter)}><option value="all">Усі статуси</option>{Object.entries(lifecycleLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label><span>Стан</span><select value={workHealthFilter} onChange={(event) => setWorkHealthFilter(event.target.value as typeof workHealthFilter)}><option value="all">Будь-який стан</option><option value="branch_blocker">Блокери</option><option value="no_report_5d">Немає звіту понад 5 днів</option><option value="normal">Нормально</option><option value="risk">Є ризик</option><option value="blocked">Заблоковано</option></select></label><label><span>Пріоритет</span><select value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value as typeof priorityFilter)}><option value="all">Усі пріоритети</option><option value="critical">Критичний</option><option value="high">Високий</option><option value="normal">Нормальний</option><option value="low">Низький</option></select></label><button type="button" disabled={!activeFilterCount} onClick={resetListFilters}>Скинути фільтри</button></div></details>
         <div className="work-inbox-list">{filtered.map((node) => <button className={`work-list-row ${node.id === current?.id ? "selected" : ""}`} key={node.id} onClick={() => setSelectedId(node.id)}><div><span>{kindLabels[node.kind]} · {node.code}</span><strong>{node.title}</strong></div><StatusBadge node={node} /><footer><small>{node.progress}%</small><time>{dateLabel(node.plannedEnd)}</time></footer></button>)}{!filtered.length && <p className="empty-state padded">За вибраними фільтрами карток немає.</p>}</div>
       </aside>
       {current ? <section className="work-desk"><header className="work-desk-head"><div><span>{kindLabels[current.kind]} · {current.code}</span><h2>{current.title}</h2><p>{current.result}</p></div><div className="work-desk-actions"><ProgressRing value={current.progress} />{!["acceptance", "completed"].includes(current.lifecycle) && mayWork && <button className="positive primary-completion" disabled={Boolean(completionReason)} title={completionReason || "Передати результат на приймання"} onClick={() => void completeNode(current)}>Завершити</button>}<details className="work-card-menu"><summary aria-label="Інші дії з карткою">⋮ Дії</summary><div>{mayEditCard && <button onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void openEdit(current); }}>Редагувати картку</button>}<button onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void copyNodeLink(current, "my"); }}>Копіювати посилання</button>{current.kind === "task" && <button onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); scrollToSection(`asana-link-${current.id}`); }}>Перейти до Asana</button>}<button onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); openTree(current.id); }}>Паспорт у дереві</button></div></details></div></header><div className="status-line"><StatusBadge node={current} />{current.decisionRequired && <span className="decision-badge">Потрібне рішення</span>}<span>Строк {dateLabel(current.plannedEnd)}</span><span>Прогноз {dateLabel(current.forecastEnd)}</span>{completionReason && <span className="completion-hint">{completionReason}</span>}</div><nav className="work-card-sections" aria-label="Розділи робочої картки"><button onClick={() => scrollToSection(`card-description-${current.id}`)}>Опис</button>{current.kind === "task" && <><button onClick={() => scrollToSection(`work-status-${current.id}`)}>Стан і звіт</button><button onClick={() => scrollToSection(`evidence-${current.id}`)}>Докази</button><button onClick={() => scrollToSection(`asana-link-${current.id}`)}>Asana</button><button onClick={() => scrollToSection(`work-history-${current.id}`)}>Історія</button></>}<button onClick={() => scrollToSection(`discussion-${current.id}`)}>Комунікація</button></nav>
@@ -1509,7 +1530,7 @@ function DiscussionPanel({ node, payload, mutate, notify, userById }: { node: Wo
 function CoordinationView({ payload, userById, select, open }: { payload: PortalPayload; userById: (id: string) => PortalUser | undefined; select: (id: string) => void; open: (node: WorkNode) => void }) {
   const [query, setQuery] = useState("");
   const [ownerId, setOwnerId] = useState("all");
-  const [state, setState] = useState<"all" | "risk" | "active" | "completed">("all");
+  const [state, setState] = useState<"all" | "risk" | "active" | "completed" | "no_report_5d">("all");
   const [level, setLevel] = useState<"all" | NodeKind>("all");
   const [expandedRows, setExpandedRows] = useState<Set<string>>(() => new Set());
   const activeNodes = payload.nodes.filter((node) => !node.archived).sort(compareNodeCodes);
@@ -1522,7 +1543,7 @@ function CoordinationView({ payload, userById, select, open }: { payload: Portal
     const normalizedQuery = query.trim().toLowerCase();
     const matchesQuery = !normalizedQuery || candidates.some((item) => `${item.code} ${item.title}`.toLowerCase().includes(normalizedQuery));
     const matchesExecutorAndState = candidates.some((item) => (level === "all" || item.kind === level) && (ownerId === "all" || item.assigneeId === ownerId)
-      && (state === "all" || state === "risk" && coordinationAttentionReasons(payload, item).length > 0 || state === "active" && !["completed", "cancelled"].includes(item.lifecycle) || state === "completed" && item.lifecycle === "completed"));
+      && (state === "all" || state === "risk" && coordinationAttentionReasons(payload, item).length > 0 || state === "active" && !["completed", "cancelled"].includes(item.lifecycle) || state === "completed" && item.lifecycle === "completed" || state === "no_report_5d" && lacksRecentReport(item)));
     return matchesQuery && matchesExecutorAndState;
   });
   const scopeIds = new Set(units.flatMap(({ node, branch }) => [...nodePath(payload.nodes, node).map((item) => item.id), ...branch.map((item) => item.id)]));
@@ -1534,7 +1555,7 @@ function CoordinationView({ payload, userById, select, open }: { payload: Portal
     return (!normalizedQuery || `${node.code} ${node.title} ${node.result}`.toLowerCase().includes(normalizedQuery))
       && (level === "all" || node.kind === level)
       && (ownerId === "all" || node.assigneeId === ownerId)
-      && (state === "all" || state === "risk" && coordinationAttentionReasons(payload, node).length > 0 || state === "active" && !["completed", "cancelled"].includes(node.lifecycle) || state === "completed" && node.lifecycle === "completed");
+      && (state === "all" || state === "risk" && coordinationAttentionReasons(payload, node).length > 0 || state === "active" && !["completed", "cancelled"].includes(node.lifecycle) || state === "completed" && node.lifecycle === "completed" || state === "no_report_5d" && lacksRecentReport(node));
   };
   for (const { goal, branch } of units) {
     for (const node of goal ? [goal, ...branch] : branch) {
@@ -1575,7 +1596,7 @@ function CoordinationView({ payload, userById, select, open }: { payload: Portal
       {opened && reports.map((report) => <div className="coordination-report-row" key={report.id} style={{ "--coord-depth": depth + 1 } as React.CSSProperties}><div><span>{new Date(report.createdAt).toLocaleString("uk-UA")}</span><strong>{report.summary}</strong><small>{userById(report.createdBy)?.name || "Asana"}</small></div><span>{lifecycleLabels[report.lifecycle]}</span><span>{report.progress}%</span><span>{report.forecastEnd ? dateLabel(report.forecastEnd) : "Без прогнозу"}</span><p>{report.nextAction || "Наступну дію не вказано"}</p></div>)}
     </div>;
   };
-  return <><PageIntro kicker="Одиниця координації" title="Координація за управлінськими циклами" text="Предмет координації — зведений стан усіх завдань циклу з розрізом за підциклами, строками, блокерами, рішеннями та прийманням." actions={<div className="page-filter-bar coordination-filter-bar"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Пошук цілі, циклу, підциклу або завдання…" /><select value={level} onChange={(event) => setLevel(event.target.value as typeof level)}><option value="all">Усі рівні</option><option value="goal">Цілі</option><option value="cycle">Цикли</option><option value="subcycle">Підцикли</option><option value="task">Завдання</option></select><select value={ownerId} onChange={(event) => setOwnerId(event.target.value)}><option value="all">Усі виконавці</option>{payload.users.filter((user) => user.active).map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select><select value={state} onChange={(event) => setState(event.target.value as typeof state)}><option value="all">Усі стани</option><option value="active">Активні об’єкти</option><option value="risk">Потребує координації</option><option value="completed">Завершені об’єкти</option></select></div>} />
+  return <><PageIntro kicker="Одиниця координації" title="Координація за управлінськими циклами" text="Предмет координації — зведений стан усіх завдань циклу з розрізом за підциклами, строками, блокерами, рішеннями та прийманням." actions={<div className="page-filter-bar coordination-filter-bar"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Пошук цілі, циклу, підциклу або завдання…" /><select value={level} onChange={(event) => setLevel(event.target.value as typeof level)}><option value="all">Усі рівні</option><option value="goal">Цілі</option><option value="cycle">Цикли</option><option value="subcycle">Підцикли</option><option value="task">Завдання</option></select><select value={ownerId} onChange={(event) => setOwnerId(event.target.value)}><option value="all">Усі виконавці</option>{payload.users.filter((user) => user.active).map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select><select value={state} onChange={(event) => setState(event.target.value as typeof state)}><option value="all">Усі стани</option><option value="active">Активні об’єкти</option><option value="risk">Потребує координації</option><option value="no_report_5d">Немає звіту понад 5 днів</option><option value="completed">Завершені об’єкти</option></select></div>} />
     <section className="panel coordination-attention"><div className="panel-head"><div><span>Контроль і реакція</span><h2>Потребує координації</h2></div><b className="count amber">{attentionNodes.length}</b></div><div className="coordination-attention-table"><div className="coordination-attention-head"><span>Об’єкт</span><span>Причини</span><span>Відповідальний</span><span>Строк</span></div>{attentionNodes.map(({ node, reasons }) => <button key={node.id} onClick={() => select(node.id)}><div><span>{node.code} · {kindLabels[node.kind]}</span><strong>{node.title}</strong></div><div>{reasons.map((reason) => <span key={reason}>{reason}</span>)}</div><span>{userById(node.assigneeId)?.name || "—"}</span><time>{dateLabel(node.plannedEnd)}</time></button>)}{!attentionNodes.length && <p className="empty-state padded">За вибраними фільтрами немає об’єктів, що потребують координації.</p>}</div></section>
     <section className="panel coordination-tree-table"><div className="panel-head"><div><span>Зведена звітність циклів</span><h2>Стратегічна ціль → управлінський цикл → підцикл → завдання → три останні звіти</h2></div><div className="coordination-tree-controls"><button className={structureExpanded ? "active" : ""} onClick={toggleStructure}>{structureExpanded ? "Згорнути рівні" : "Розгорнути рівні"}</button><button className={reportsExpanded ? "active" : ""} disabled={!reportIds.length} onClick={toggleReports}>{reportsExpanded ? "Сховати звіти" : "Показати звіти"}</button><button className={everythingExpanded ? "active" : ""} disabled={!allExpandableIds.length} onClick={toggleEverything}>{everythingExpanded ? "Згорнути все" : "Розгорнути все"}</button><b className="count">{units.length}</b></div></div><div className="coordination-tree-head"><span>Об’єкт управління</span><span>Відповідальний</span><span>Статус</span><span>Прогрес</span><span>Строк</span><span>Увага / дія</span></div><div className="coordination-tree-body">{goals.map((goal) => renderCoordinationRow(goal))}{orphanCycles.map((cycle) => renderCoordinationRow(cycle))}{!units.length && <p className="empty-state padded">За вибраними фільтрами управлінських циклів немає.</p>}</div></section>
   </>;

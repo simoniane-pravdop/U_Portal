@@ -1243,10 +1243,10 @@ small { font-size: 11px !important; line-height: 1.35; }
 .health-comment-banner p { margin: 2px 0 0; color: #3c4f64; font-size: 12px; line-height: 1.45; }
 
 .coordination-tree-row { min-height: 54px; padding-block: 9px; }
-.coordination-tree-branch.level-goal > .coordination-tree-row { color: #fff; background: #214c76; }
-.coordination-tree-branch.level-cycle > .coordination-tree-row { background: #dce8f3; }
-.coordination-tree-branch.level-subcycle > .coordination-tree-row { background: #edf3f8; }
-.coordination-tree-branch.level-task > .coordination-tree-row { background: #f8fafc; }
+.coordination-tree-branch.level-goal > .coordination-tree-row { color: #fff; background: #173f6b; border-bottom-color: #0f3155; }
+.coordination-tree-branch.level-cycle > .coordination-tree-row { background: #7f9fbb; border-bottom-color: #6d8da9; }
+.coordination-tree-branch.level-subcycle > .coordination-tree-row { background: #aec4d7; border-bottom-color: #9ab3c8; }
+.coordination-tree-branch.level-task > .coordination-tree-row { background: #d4e1ec; border-bottom-color: #c0d1df; }
 .coordination-tree-branch.level-goal > .coordination-tree-row .coordination-object strong,
 .coordination-tree-branch.level-goal > .coordination-tree-row .coordination-object small,
 .coordination-tree-branch.level-goal > .coordination-tree-row .coordination-owner,
@@ -1262,8 +1262,18 @@ small { font-size: 11px !important; line-height: 1.35; }
 .coordination-row-attention > span, .coordination-row-attention > b, .coordination-row-attention > button { font-size: 11px; }
 .coordination-report-row { min-height: 58px; background: #fff; }
 .coordination-report-row > div span, .coordination-report-row > div small, .coordination-report-row > span { font-size: 11px; }
-.coordination-report-row > div strong { overflow: visible; overflow-wrap: anywhere; font-size: 13px; text-overflow: clip; white-space: normal; }
+.coordination-report-row > div strong { overflow: visible; overflow-wrap: anywhere; font-size: 13px; font-weight: 400; text-overflow: clip; white-space: normal; }
 .coordination-report-row p { font-size: 12px; line-height: 1.45; }
+.inbox-actions button span { font-size: 11px; }
+.inbox-actions button strong { font-size: 13px; line-height: 1.35; }
+.inbox-actions button small { font-size: 11px !important; }
+.notification-toolbar button { min-height: 34px; padding: 7px 10px; font-size: 12px; }
+.notification-toolbar span { font-size: 11px; }
+.notification-list article > button:first-child { padding-block: 13px; }
+.notification-list article span { font-size: 11px; }
+.notification-list article strong { font-size: 13px; line-height: 1.35; }
+.notification-list article p { font-size: 12px; line-height: 1.4; }
+.notification-list article small, .notification-list .mark-read { font-size: 11px !important; }
 
 .work-inbox { top: 16px; }
 .work-desk-actions { position: relative; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
