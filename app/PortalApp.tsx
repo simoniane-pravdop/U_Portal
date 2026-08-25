@@ -52,6 +52,8 @@ const lifecycleLabels: Record<LifecycleStatus, string> = {
 const healthLabels: Record<HealthStatus, string> = { normal: "Нормально", risk: "Є ризик", blocked: "Заблоковано" };
 const kindLabels: Record<NodeKind, string> = { goal: "Стратегічна ціль", cycle: "Управлінський цикл", subcycle: "Підцикл", task: "Завдання" };
 const priorityLabels: Record<WorkNode["priority"], string> = { critical: "Критичний", high: "Високий", normal: "Нормальний", low: "Низький" };
+const managementCodeCollator = new Intl.Collator("uk", { numeric: true, sensitivity: "base" });
+const compareNodeCodes = (left: WorkNode, right: WorkNode) => managementCodeCollator.compare(left.code, right.code) || left.title.localeCompare(right.title, "uk");
 const startLabels: Record<StartMode, string> = {
   with_parent: "Разом із батьківським рівнем",
   manual_capacity: "Після звільнення ресурсу",
@@ -1093,7 +1095,7 @@ function TreeView(props: {
   const [kindFilter, setKindFilter] = useState<"all" | NodeKind>("all");
   const [ownerFilter, setOwnerFilter] = useState("all");
   const [stateFilter, setStateFilter] = useState<"all" | "active" | "risk" | "completed">("all");
-  const active = payload.nodes.filter((node) => !node.archived);
+  const active = payload.nodes.filter((node) => !node.archived).sort(compareNodeCodes);
   const query = search.trim().toLowerCase();
   const matchesFilters = (node: WorkNode) => {
     const matchesQuery = !query || `${node.code} ${node.title} ${node.result}`.toLowerCase().includes(query);
@@ -1117,7 +1119,7 @@ function TreeView(props: {
   }
   const filtered = flatLevelResults ? directMatches : active.filter((node) => visibleIds.has(node.id));
   const predecessors = selected ? payload.dependencies.filter((item) => item.successorId === selected.id).map((item) => payload.nodes.find((node) => node.id === item.predecessorId)).filter(Boolean) as WorkNode[] : [];
-  const children = selected ? payload.nodes.filter((node) => node.parentId === selected.id && !node.archived) : [];
+  const children = selected ? payload.nodes.filter((node) => node.parentId === selected.id && !node.archived).sort(compareNodeCodes) : [];
   const startTreeResize = (event: React.PointerEvent<HTMLDivElement>) => {
     if (treeCompact || window.innerWidth <= 900) return;
     event.preventDefault();
@@ -1476,8 +1478,8 @@ function CoordinationView({ payload, userById, select, open }: { payload: Portal
   const [ownerId, setOwnerId] = useState("all");
   const [state, setState] = useState<"all" | "risk" | "active" | "completed">("all");
   const [expandedRows, setExpandedRows] = useState<Set<string>>(() => new Set());
-  const activeNodes = payload.nodes.filter((node) => !node.archived);
-  const units = payload.nodes.filter((node) => node.kind === "cycle" && !node.archived).map((node) => {
+  const activeNodes = payload.nodes.filter((node) => !node.archived).sort(compareNodeCodes);
+  const units = payload.nodes.filter((node) => node.kind === "cycle" && !node.archived).sort(compareNodeCodes).map((node) => {
     const branch = descendants(activeNodes, node.id);
     return { node, branch, subcycles: branch.filter((item) => item.kind === "subcycle"), tasks: branch.filter((item) => item.kind === "task") };
   }).filter(({ branch }) => {
@@ -1866,7 +1868,7 @@ function focusFirstError() {
 function NodeModal({ node, setNode, nodes, users, errors, clearError, close, save }: { node: WorkNode; setNode: (node: WorkNode) => void; nodes: WorkNode[]; users: PortalUser[]; errors: NodeErrors; clearError: (key: keyof WorkNode) => void; close: () => void; save: () => void }) {
   const update = <K extends keyof WorkNode>(key: K, value: WorkNode[K]) => { clearError(key); setNode({ ...node, [key]: value }); };
   const allowedParents = allowedParentKinds(node.kind);
-  const validParents = allowedParents.length ? nodes.filter((item) => allowedParents.includes(item.kind) && !item.archived && item.id !== node.id) : [];
+  const validParents = allowedParents.length ? nodes.filter((item) => allowedParents.includes(item.kind) && !item.archived && item.id !== node.id).sort(compareNodeCodes) : [];
   const path = nodePath(nodes.filter((item) => item.id !== node.id).concat(node), node);
   const hasChildren = nodes.some((item) => item.parentId === node.id && !item.archived);
   const controlPlaces = node.controlPlace ? node.controlPlace.split("\n") : [""];

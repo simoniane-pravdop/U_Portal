@@ -138,6 +138,8 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /Підключити Telegram/);
   assert.match(source, /recalculateHierarchy/);
   assert.match(source, /firstAvailableNumber/);
+  assert.match(source, /Intl\.Collator\("uk", \{ numeric: true/);
+  assert.match(source, /sort\(compareNodeCodes\)/);
   assert.match(source, /nextCode\(nodes, parent, node\.id\)/);
   assert.match(source, /Після вибору портал присвоїть перший вільний номер/);
   assert.match(source, /child\.code = `\$\{updated\.code\}/);
