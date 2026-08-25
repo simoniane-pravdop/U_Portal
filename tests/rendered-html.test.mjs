@@ -209,6 +209,7 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /work-advanced-filters/);
   assert.match(source, /Скинути фільтри/);
   assert.match(source, /Редагувати картку/);
+  assert.match(source, /responsibility-fields/);
   assert.match(source, /Особисті підключення доступні кожному користувачу/);
   assert.match(source, /Конкретні задачі прив’язуються в «Моїй роботі»/);
   assert.match(source, /portal:work-draft:\$\{currentUserId\}/);
@@ -226,6 +227,8 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /filter === "manage" && node\.ownerId === payload\.currentUser\.id/);
   assert.match(source, /filter === "acceptance"/);
   assert.match(source, /workFilterForUser/);
+  assert.match(source, /hasWorkAccessForUser/);
+  assert.match(source, /if \(!hasWorkAccessForUser\(node, payload\.currentUser\)\) \{ setView\("tree"\)/);
   assert.ok(source.indexOf("node.ownerId === user.id") < source.indexOf("node.acceptorId === user.id"));
   assert.match(source, /node\.participantIds\.includes\(payload\.currentUser\.id\)/);
   assert.match(source, /lacksRecentReport/);
@@ -308,6 +311,13 @@ test("compact laptop and mobile layouts are declared", async () => {
   assert.match(css, /\.coordination-tree-branch\.level-goal/);
   assert.match(css, /\.coordination-tree-branch\.level-subcycle/);
   assert.match(css, /\.coordination-tree-branch\.level-task/);
+  assert.match(css, /--uo-goal: #173f6b/);
+  assert.match(css, /\.tree-row\.kind-cycle/);
+  assert.match(css, /\.work-list-row\.kind-subcycle/);
+  assert.match(css, /\.responsibility-fields/);
+  assert.match(css, /\.coordination-object span.*color: #fff/);
+  assert.match(css, /\.coordination-object small \{ color: #0b1e33/);
+  assert.match(css, /\.coordination-report-row > div strong.*font-weight: 400/);
   assert.match(css, /\.notification-list article strong/);
   assert.match(css, /\.inbox-actions button strong/);
   assert.match(css, /\.tree-work-snapshot/);

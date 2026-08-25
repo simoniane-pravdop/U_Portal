@@ -18,6 +18,10 @@
   --amber-soft: #fff2dc;
   --red: #a6474e;
   --red-soft: #fde9ea;
+  --uo-goal: #173f6b;
+  --uo-cycle: #7f9fbb;
+  --uo-subcycle: #aec4d7;
+  --uo-task: #d4e1ec;
   --shadow: 0 12px 34px rgba(21, 46, 76, .08);
 }
 
@@ -1216,6 +1220,24 @@ small { font-size: 11px !important; line-height: 1.35; }
 .tree-row-main { align-items: start; }
 .tree-name { overflow: visible; overflow-wrap: anywhere; text-overflow: clip; white-space: normal; line-height: 1.35; }
 .tree-row .health-badge { align-self: start; }
+.tree-row.kind-goal { color: #fff; background: var(--uo-goal); }
+.tree-row.kind-cycle { color: var(--navy-950); background: var(--uo-cycle); }
+.tree-row.kind-subcycle { color: var(--navy-950); background: var(--uo-subcycle); }
+.tree-row.kind-task { color: var(--navy-950); background: var(--uo-task); }
+.tree-row.kind-goal .tree-name, .tree-row.kind-goal .tree-toggle, .tree-row.kind-goal .tree-row-menu summary { color: #fff; }
+.tree-row .tree-code { min-height: 28px; display: grid; place-items: center; padding: 3px 6px; border-radius: 6px; color: #fff; background: var(--navy-800); }
+.tree-row.kind-goal .tree-code { background: rgba(255,255,255,.17); }
+.tree-row.selected { box-shadow: inset 0 0 0 3px #edc45f; }
+.tree-row.kind-cycle:hover, .tree-row.kind-subcycle:hover, .tree-row.kind-task:hover { filter: brightness(.96); }
+.work-list-row.kind-goal { color: #fff; background: var(--uo-goal); }
+.work-list-row.kind-cycle { background: var(--uo-cycle); }
+.work-list-row.kind-subcycle { background: var(--uo-subcycle); }
+.work-list-row.kind-task { background: var(--uo-task); }
+.work-list-row.kind-goal > div span, .work-list-row.kind-goal footer { color: #fff; }
+.work-list-row.selected { box-shadow: inset 4px 0 0 #edc45f; }
+.goal-card { color: #fff; border-color: #0f3155; background: var(--uo-goal); }
+.goal-card .goal-copy h3, .goal-card .goal-meta, .goal-card .goal-meta small { color: #fff; }
+.goal-card:hover { border-color: #edc45f; background: #214f7d; }
 .tree-row-menu > div button, .work-filter button, .work-section-head > button, .work-action-row button, .detail-tabs button, .node-head-actions button, .node-head-actions .work-link { font-size: 12px; }
 
 .dashboard-filter-panel { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 12px; padding: 11px 13px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
@@ -1243,10 +1265,10 @@ small { font-size: 11px !important; line-height: 1.35; }
 .health-comment-banner p { margin: 2px 0 0; color: #3c4f64; font-size: 12px; line-height: 1.45; }
 
 .coordination-tree-row { min-height: 54px; padding-block: 9px; }
-.coordination-tree-branch.level-goal > .coordination-tree-row { color: #fff; background: #173f6b; border-bottom-color: #0f3155; }
-.coordination-tree-branch.level-cycle > .coordination-tree-row { background: #7f9fbb; border-bottom-color: #6d8da9; }
-.coordination-tree-branch.level-subcycle > .coordination-tree-row { background: #aec4d7; border-bottom-color: #9ab3c8; }
-.coordination-tree-branch.level-task > .coordination-tree-row { background: #d4e1ec; border-bottom-color: #c0d1df; }
+.coordination-tree-branch.level-goal > .coordination-tree-row { color: #fff; background: var(--uo-goal); border-bottom-color: #0f3155; }
+.coordination-tree-branch.level-cycle > .coordination-tree-row { background: var(--uo-cycle); border-bottom-color: #6d8da9; }
+.coordination-tree-branch.level-subcycle > .coordination-tree-row { background: var(--uo-subcycle); border-bottom-color: #9ab3c8; }
+.coordination-tree-branch.level-task > .coordination-tree-row { background: var(--uo-task); border-bottom-color: #c0d1df; }
 .coordination-tree-branch.level-goal > .coordination-tree-row .coordination-object strong,
 .coordination-tree-branch.level-goal > .coordination-tree-row .coordination-object small,
 .coordination-tree-branch.level-goal > .coordination-tree-row .coordination-owner,
@@ -1255,9 +1277,9 @@ small { font-size: 11px !important; line-height: 1.35; }
 .coordination-tree-branch.level-goal > .coordination-tree-row .coordination-expand { color: #fff; }
 .coordination-tree-head { font-size: 11px; }
 .coordination-object { grid-template-columns: 62px minmax(0, 1fr); gap: 3px 8px; }
-.coordination-object span { font-size: 12px; }
+.coordination-object span { min-height: 30px; display: grid; place-items: center; padding: 4px 7px; border-radius: 6px; color: #fff; background: var(--navy-800); font-size: 12px; }
 .coordination-object strong { overflow: visible; overflow-wrap: anywhere; font-size: 13px; text-overflow: clip; white-space: normal; line-height: 1.35; }
-.coordination-object small { font-size: 11px; }
+.coordination-object small { color: #0b1e33; font-size: 11px; }
 .coordination-owner, .coordination-progress, .coordination-tree-row > time { font-size: 12px; }
 .coordination-row-attention > span, .coordination-row-attention > b, .coordination-row-attention > button { font-size: 11px; }
 .coordination-report-row { min-height: 58px; background: #fff; }
@@ -1274,6 +1296,43 @@ small { font-size: 11px !important; line-height: 1.35; }
 .notification-list article strong { font-size: 13px; line-height: 1.35; }
 .notification-list article p { font-size: 12px; line-height: 1.4; }
 .notification-list article small, .notification-list .mark-read { font-size: 11px !important; }
+
+/* Типографічна шкала, уніфікована зі зведеною координацією */
+body { font-size: 14px; }
+.sidebar nav strong { font-size: 13px; }
+.sidebar nav small, .sidebar-foot small { font-size: 11px; }
+.page-intro > div:first-child > span { font-size: 11px; }
+.page-intro h1 { font-size: 28px; }
+.page-intro p { font-size: 14px; }
+.panel-head span { font-size: 11px; }
+.panel-head h2 { font-size: 17px; }
+.page-filter-bar input, .page-filter-bar select, .compact-filters select, .work-list-controls input, .work-list-controls select, .work-advanced-filters select { font-size: 14px !important; }
+.metric span, .metric small, .goal-copy > span, .goal-meta small, .attention-list small { font-size: 11px; }
+.metric strong { font-size: 30px; }
+.goal-copy h3, .attention-list strong { font-size: 13px; }
+.tree-name { font-size: 13px; }
+.tree-code, .health-badge, .decision-badge { font-size: 11px; }
+.node-detail-head h2 { font-size: 24px; }
+.node-detail-head p { font-size: 14px; }
+.detail-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.detail-grid article > span { font-size: 11px; }
+.detail-grid article > strong, .person-line strong { font-size: 13px; }
+.detail-grid article > small, .person-line small { font-size: 11px; }
+.detail-section dt { font-size: 11px; }
+.detail-section dd { font-size: 13px; }
+.work-summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.work-desk-head h2 { font-size: 23px; }
+.work-desk-head p, .work-section > p { font-size: 13px; }
+.work-list-row > div span { font-size: 11px; }
+.work-list-row > div strong { font-size: 13px; }
+.work-list-row footer { font-size: 11px; }
+.work-section-head h3 { font-size: 16px; }
+.work-section-head span { font-size: 11px; }
+.status-form-grid label > .field-label, .form-grid label > .field-label { font-size: 12px; }
+.form-grid input, .form-grid select, .form-grid textarea, .status-form-grid input, .status-form-grid select, .status-form-grid textarea { font-size: 14px !important; }
+.modal-card > header h2 { font-size: 20px; }
+.modal-card > header span, .modal-card > footer button { font-size: 12px; }
+.responsibility-fields { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 11px; }
 
 .work-inbox { top: 16px; }
 .work-desk-actions { position: relative; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
@@ -1379,6 +1438,7 @@ small { font-size: 11px !important; line-height: 1.35; }
   .mobile-account strong, .mobile-account small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .mobile-account > button { min-height: 40px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; color: var(--navy-800); background: #fff; }
   .content { padding-top: 12px; }
+  .responsibility-fields, .detail-grid, .work-summary-grid { grid-template-columns: 1fr; }
   .coordination-filter-bar { grid-template-columns: 1fr; }
   .tree-catalog:has(.tree-mode-switch):has(.compact-filters) .tree-scroll { height: auto; }
   .page-intro p { display: block; font-size: 12px; }
