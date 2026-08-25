@@ -216,6 +216,12 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /Координатор/);
   assert.match(source, /Керівник вищої ланки/);
   assert.match(source, /branchHasOpenBlocker/);
+  assert.match(source, /HealthOverrideFields/);
+  assert.match(source, /healthOverride/);
+  assert.match(source, /healthComment/);
+  assert.match(source, /Додайте пояснення ризику або блокера/);
+  assert.match(source, /Коментар до ризику \/ блокера/);
+  assert.match(source, /health-comment-banner/);
   assert.match(source, /item\.health === "blocked" \|\| item\.health === "risk"/);
   assert.match(source, /filter === "manage" && node\.ownerId === payload\.currentUser\.id/);
   assert.match(source, /filter === "acceptance"/);
@@ -258,7 +264,7 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /За замовчуванням картку бачать лише її учасники/);
   assert.match(source, /selected\?\.kind === "cycle"/);
   assert.doesNotMatch(source, /Одиниця координації — підцикл/);
-  assert.match(source, /Статус Завдання|parent\.health = state\.blockers/);
+  assert.match(source, /parent\.health = parent\.healthOverride \|\| calculatedHealth/);
   assert.doesNotMatch(source, /Дерево УО|Створити УО|Паспорт УО|Нижчі УО|Тут виконується УО/);
   assert.doesNotMatch(source, /id: "integrations"/);
 });
@@ -289,6 +295,10 @@ test("compact laptop and mobile layouts are declared", async () => {
   assert.match(css, /\.tree-workbench\.compact-tree/);
   assert.match(css, /\.tree-mode-switch/);
   assert.match(css, /\.archive-state/);
+  assert.match(css, /\.health-comment-banner/);
+  assert.match(css, /\.coordination-tree-branch\.level-goal/);
+  assert.match(css, /\.coordination-tree-branch\.level-subcycle/);
+  assert.match(css, /\.coordination-tree-branch\.level-task/);
   assert.match(css, /\.tree-work-snapshot/);
   assert.match(css, /\.tree-snapshot-summary/);
   assert.match(css, /\.detail-columns\.info-only > aside \{ display: none !important/);

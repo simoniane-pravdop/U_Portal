@@ -1212,6 +1212,10 @@ button, .button-link { font-size: 12px; }
 small { font-size: 11px !important; line-height: 1.35; }
 .panel-head span, .work-section-head span, .work-summary-grid article > span, .work-object-picker > span, .status-form-grid label > .field-label, .form-grid label > .field-label, .library-add > label > .field-label, .user-library-table label span, .work-advanced-filters label span, .work-card-description-body dt { font-size: 11px; }
 .tree-name, .tree-code, .health-badge, .decision-badge, .work-list-row > div span, .work-list-row > div strong, .work-card-description-body dd, .discussion-list article p, .decision-action-card dd { font-size: 12px; }
+.tree-row { min-height: 38px; align-items: start; }
+.tree-row-main { align-items: start; }
+.tree-name { overflow: visible; overflow-wrap: anywhere; text-overflow: clip; white-space: normal; line-height: 1.35; }
+.tree-row .health-badge { align-self: start; }
 .tree-row-menu > div button, .work-filter button, .work-section-head > button, .work-action-row button, .detail-tabs button, .node-head-actions button, .node-head-actions .work-link { font-size: 12px; }
 
 .dashboard-filter-panel { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 12px; padding: 11px 13px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
@@ -1231,6 +1235,34 @@ small { font-size: 11px !important; line-height: 1.35; }
 .flat-restore { min-width: 34px; min-height: 34px; padding: 0; border: 1px solid var(--green); border-radius: 6px; color: #fff; background: var(--green); font-size: 17px; font-weight: 900; }
 .archive-state { padding: 7px 9px; border-radius: 999px; color: #75571c !important; background: var(--amber-soft); font-size: 11px !important; font-weight: 850; }
 .restore-action { min-height: 38px; padding: 8px 11px; border: 1px solid var(--green); border-radius: 7px; font-size: 12px; font-weight: 850; }
+.health-comment-banner { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 8px; padding: 10px 16px; border-bottom: 1px solid #ead7a6; background: var(--amber-soft); }
+.health-comment-banner.blocked { border-color: #e8bdc0; background: var(--red-soft); }
+.health-comment-banner strong { padding: 4px 7px; border-radius: 999px; color: #795014; background: #fff; font-size: 11px; text-transform: uppercase; }
+.health-comment-banner.blocked strong { color: var(--red); }
+.health-comment-banner p { margin: 2px 0 0; color: #3c4f64; font-size: 12px; line-height: 1.45; }
+
+.coordination-tree-row { min-height: 54px; padding-block: 9px; }
+.coordination-tree-branch.level-goal > .coordination-tree-row { color: #fff; background: #214c76; }
+.coordination-tree-branch.level-cycle > .coordination-tree-row { background: #dce8f3; }
+.coordination-tree-branch.level-subcycle > .coordination-tree-row { background: #edf3f8; }
+.coordination-tree-branch.level-task > .coordination-tree-row { background: #f8fafc; }
+.coordination-tree-branch.level-goal > .coordination-tree-row .coordination-object strong,
+.coordination-tree-branch.level-goal > .coordination-tree-row .coordination-object small,
+.coordination-tree-branch.level-goal > .coordination-tree-row .coordination-owner,
+.coordination-tree-branch.level-goal > .coordination-tree-row .coordination-progress,
+.coordination-tree-branch.level-goal > .coordination-tree-row > time { color: #fff; }
+.coordination-tree-branch.level-goal > .coordination-tree-row .coordination-expand { color: #fff; }
+.coordination-tree-head { font-size: 11px; }
+.coordination-object { grid-template-columns: 62px minmax(0, 1fr); gap: 3px 8px; }
+.coordination-object span { font-size: 12px; }
+.coordination-object strong { overflow: visible; overflow-wrap: anywhere; font-size: 13px; text-overflow: clip; white-space: normal; line-height: 1.35; }
+.coordination-object small { font-size: 11px; }
+.coordination-owner, .coordination-progress, .coordination-tree-row > time { font-size: 12px; }
+.coordination-row-attention > span, .coordination-row-attention > b, .coordination-row-attention > button { font-size: 11px; }
+.coordination-report-row { min-height: 58px; background: #fff; }
+.coordination-report-row > div span, .coordination-report-row > div small, .coordination-report-row > span { font-size: 11px; }
+.coordination-report-row > div strong { overflow: visible; overflow-wrap: anywhere; font-size: 13px; text-overflow: clip; white-space: normal; }
+.coordination-report-row p { font-size: 12px; line-height: 1.45; }
 
 .work-inbox { top: 16px; }
 .work-desk-actions { position: relative; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }

@@ -90,6 +90,8 @@ export type WorkNode = {
   participantIds: string[];
   lifecycle: LifecycleStatus;
   health: HealthStatus;
+  healthOverride?: HealthStatus;
+  healthComment?: string;
   decisionRequired: boolean;
   priority: "critical" | "high" | "normal" | "low";
   plannedStart: string;
