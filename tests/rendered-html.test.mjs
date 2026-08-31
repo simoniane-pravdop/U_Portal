@@ -326,6 +326,9 @@ test("compact laptop and mobile layouts are declared", async () => {
   assert.match(css, /\.coordination-tree-branch\.level-task/);
   assert.match(css, /--uo-goal: #173f6b/);
   assert.match(css, /\.tree-row\.kind-cycle/);
+  assert.match(css, /\.tree-branch:has\(> \.tree-row > \.tree-row-menu\[open\]\)/);
+  assert.match(css, /\.tree-row:has\(> \.tree-row-menu\[open\]\)/);
+  assert.match(css, /\.tree-row-menu > div \{ position: absolute; z-index: 143; top: calc\(100% \+ 2px\)/);
   assert.match(css, /\.work-list-row\.kind-subcycle/);
   assert.match(css, /\.responsibility-fields/);
   assert.match(css, /\.coordination-object span.*color: #fff/);

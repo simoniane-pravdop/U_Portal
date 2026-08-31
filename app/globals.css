@@ -984,14 +984,18 @@ tbody tr:hover { background: #f8fafc; }
 .compact-tree .tree-filter-result { padding-block: 2px; }
 .compact-tree .tree-code { overflow: hidden; font-size: 8px; text-overflow: ellipsis; }
 .compact-tree .tree-row .tree-toggle { width: 14px; }
+.tree-branch { position: relative; }
+.tree-branch:has(> .tree-row > .tree-row-menu[open]) { z-index: 140; }
+.tree-row:has(> .tree-row-menu[open]) { position: relative; z-index: 141; overflow: visible; }
 .tree-row-menu { position: relative; align-self: center; }
-.tree-row-menu[open] { z-index: 30; }
+.tree-row-menu[open] { z-index: 142; }
+.tree-row-menu[open]::after { position: absolute; z-index: 142; top: 100%; right: 0; width: 190px; height: 4px; content: ""; }
 .tree-row-menu summary { width: 24px; height: 26px; display: grid; place-items: center; border: 1px solid transparent; border-radius: 6px; color: #6f8092; background: transparent; font-size: 16px; font-weight: 900; list-style: none; cursor: pointer; }
 .tree-row-menu summary::-webkit-details-marker { display: none; }
 .tree-row-menu summary:hover, .tree-row-menu[open] summary { border-color: #cbd6e1; background: #fff; }
 .tree-row.selected .tree-row-menu summary { color: #fff; }
 .tree-row.selected .tree-row-menu[open] summary { color: var(--navy-800); }
-.tree-row-menu > div { position: absolute; z-index: 20; top: 29px; right: 0; width: 155px; display: grid; gap: 2px; padding: 5px; border: 1px solid var(--line); border-radius: 8px; background: #fff; box-shadow: 0 12px 30px rgba(12,34,58,.18); }
+.tree-row-menu > div { position: absolute; z-index: 143; top: calc(100% + 2px); right: 0; width: 190px; display: grid; gap: 2px; padding: 5px; border: 1px solid var(--line); border-radius: 8px; background: #fff; box-shadow: 0 12px 30px rgba(12,34,58,.18); }
 .tree-row-menu > div button { display: grid; grid-template-columns: 20px 1fr; align-items: center; gap: 5px; padding: 7px 6px; text-align: left; border: 0; border-radius: 5px; color: var(--ink); background: #fff; font-size: 8px; font-weight: 750; }
 .tree-row-menu > div button:hover { background: #f1f5f8; }
 .tree-row-menu > div button span { color: var(--navy-700); font-size: 11px; }
@@ -1141,6 +1145,7 @@ tbody tr:hover { background: #f8fafc; }
   .tree-row { min-height: 40px; grid-template-columns: 22px minmax(0, 1fr) 34px; padding-block: 3px; }
   .tree-row-main { min-height: 34px; grid-template-columns: 49px minmax(0, 1fr) auto; }
   .tree-row-menu summary { width: 32px; height: 34px; }
+  .tree-row-menu[open]::after { display: none; }
   .tree-row-menu > div { position: fixed; z-index: 120; top: auto; right: 8px; bottom: calc(65px + env(safe-area-inset-bottom)); left: 8px; width: auto; padding: 7px; border-radius: 11px; }
   .tree-row-menu > div button { min-height: 42px; padding: 9px 10px; font-size: 10px; }
   .node-detail-head { flex-direction: column; }
