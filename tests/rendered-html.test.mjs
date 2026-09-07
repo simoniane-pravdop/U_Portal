@@ -1,6 +1,53 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import ts from "typescript";
+
+test("coordination flags open cycles and subcycles without active descendant tasks", async () => {
+  const source = await readFile(new URL("../app/PortalApp.tsx", import.meta.url), "utf8");
+  const rules = await readFile(new URL("../app/coordination-rules.ts", import.meta.url), "utf8");
+  const parsed = ts.createSourceFile("PortalApp.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const functions = parsed.statements.filter((statement) => ts.isFunctionDeclaration(statement)
+    && ["coordinationAttentionReasons", "descendants", "lacksRecentReport"].includes(statement.name?.text));
+  assert.equal(functions.length, 3);
+  const { outputText } = ts.transpileModule(`${rules}\n${functions.map((fn) => fn.getText(parsed)).join("\n")}\nexport { coordinationAttentionReasons };`, {
+    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+  });
+  const { coordinationAttentionReasons } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
+  const node = (id, kind, parentId = null, lifecycle = "in_progress", extra = {}) => ({ id, kind, parentId, lifecycle, health: "normal", ...extra });
+  const reasons = (target, nodes) => coordinationAttentionReasons({ nodes, blockers: [], decisions: [], acceptances: [], discussions: [] }, target);
+  for (const kind of ["cycle", "subcycle"]) {
+    const parent = node("parent", kind);
+    const expected = kind === "cycle" ? "Цикл без активних завдань" : "Підцикл без активних завдань";
+    assert.deepEqual(reasons(parent, [parent]), [expected]);
+    for (const status of ["completed", "cancelled", "idea"]) {
+      assert.deepEqual(reasons(parent, [parent, node("task", "task", parent.id, status)]), [expected]);
+    }
+    for (const status of ["draft", "planned", "ready", "in_progress", "acceptance", "paused"]) {
+      const task = node("task", "task", parent.id, status);
+      assert.deepEqual(reasons(parent, [parent, node("done", "task", parent.id, "completed"), task]), []);
+      assert.deepEqual(reasons(parent, [parent, { ...task, archived: true }]), [expected]);
+    }
+    const nested = node("nested", "subcycle", parent.id);
+    const task = node("nested-task", "task", nested.id);
+    assert.deepEqual(reasons(parent, [parent, nested, task]), []);
+    assert.deepEqual(reasons(parent, [parent, nested, { ...task, lifecycle: "completed" }]), [expected]);
+    assert.deepEqual(reasons(parent, [parent, { ...nested, archived: true }, task]), [expected]);
+    assert.deepEqual(reasons(parent, [parent, node("other-task", "task", "another-cycle")]), [expected]);
+    for (const status of ["completed", "cancelled", "idea"]) {
+      assert.deepEqual(reasons({ ...parent, lifecycle: status }, [parent]), []);
+    }
+    assert.deepEqual(reasons({ ...parent, archived: true }, [parent]), []);
+    assert.deepEqual(reasons({ ...parent, health: "risk" }, [parent]), ["Є ризик", expected]);
+  }
+  const cycle = node("cycle", "cycle");
+  const subcycle = node("subcycle", "subcycle", cycle.id);
+  const mixed = [cycle, subcycle, node("finished", "task", subcycle.id, "completed"), node("active", "task", cycle.id)];
+  assert.deepEqual(reasons(cycle, mixed), []);
+  assert.deepEqual(reasons(subcycle, mixed), ["Підцикл без активних завдань"]);
+  assert.deepEqual(reasons(node("goal", "goal"), []), []);
+  assert.deepEqual(reasons(node("task", "task"), []), []);
+});
 
 async function render() {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
@@ -257,7 +304,7 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /item\.assigneeId === ownerId/);
   assert.match(source, /node\.assigneeId === ownerId/);
   assert.match(source, /Усі виконавці/);
-  assert.match(source, /Цикл без завдань/);
+  assert.match(source, /missingActiveTasksReason\(node, descendants\(payload.nodes.filter/);
   assert.match(source, /три останні звіти/);
   assert.match(source, /slice\(0, 3\)/);
   assert.match(source, /Показати звіти/);

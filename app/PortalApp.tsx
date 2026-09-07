@@ -2,6 +2,7 @@
 /* eslint-disable @next/next/no-img-element -- the bundled 145×48 brand asset is already optimized and vinext-compatible */
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { missingActiveTasksReason } from "./coordination-rules";
 import type {
   Acceptance,
   Blocker,
@@ -122,7 +123,10 @@ function coordinationAttentionReasons(payload: PortalPayload, node: WorkNode) {
   if (node.kind === "task" && node.lifecycle === "completed" && !payload.acceptances.some((item) => item.nodeId === node.id && item.status === "accepted")) reasons.add("Завершено без приймання");
   if (node.plannedEnd && node.plannedEnd < today && !["idea", "completed", "cancelled"].includes(node.lifecycle)) reasons.add("Прострочений строк");
   if (lacksRecentReport(node)) reasons.add("Немає звіту понад 5 днів");
-  if (node.kind === "cycle" && !descendants(payload.nodes.filter((item) => !item.archived), node.id).some((item) => item.kind === "task")) reasons.add("Цикл без завдань");
+  if (node.kind === "cycle" || node.kind === "subcycle") {
+    const taskGap = missingActiveTasksReason(node, descendants(payload.nodes.filter((item) => !item.archived), node.id));
+    if (taskGap) reasons.add(taskGap);
+  }
   return [...reasons];
 }
 
