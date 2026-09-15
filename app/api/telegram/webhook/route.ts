@@ -51,7 +51,7 @@ export async function POST(request: Request) {
   }
   if (/^\/my(?:@\w+)?$/i.test(text)) {
     const { state } = await loadState();
-    const mine = state.nodes.filter((node) => !node.archived && !["completed", "cancelled"].includes(node.lifecycle) && [node.ownerId, node.assigneeId, node.acceptorId].includes(link.user_id)).slice(0, 12);
+    const mine = state.nodes.filter((node) => !node.archived && !["completed", "cancelled"].includes(node.lifecycle) && [node.assigneeId, node.acceptorId].includes(link.user_id)).slice(0, 12);
     const body = mine.length ? mine.map((node) => `${node.code} · ${node.title} — ${node.progress}%${node.health === "normal" ? "" : ` · ${node.health === "blocked" ? "заблоковано" : "ризик"}`}`).join("\n") : "Відкритих об’єктів немає.";
     await sendTelegramMessage(chatId, `Моя робота\n\n${body}`);
     return Response.json({ ok: true });

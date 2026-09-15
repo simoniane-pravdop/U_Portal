@@ -85,11 +85,14 @@ export type WorkNode = {
   result: string;
   nonResult: string;
   acceptanceCriteria: string;
-  ownerId: string;
+  /** Legacy per-card coordinator; retained only for historical data compatibility. */
+  ownerId?: string;
   assigneeId: string;
+  /** Initiator: approves blockers, decisions and completion. */
   acceptorId: string;
   participantIds: string[];
   lifecycle: LifecycleStatus;
+  lifecycleOverride?: LifecycleStatus | null;
   health: HealthStatus;
   healthOverride?: HealthStatus;
   healthComment?: string;

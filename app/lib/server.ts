@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import seed from "../data/seed.json";
+import { routePendingRequests } from "./responsibility";
 import type { PortalState, PortalUser, SessionUser } from "../types";
 
 type RuntimeEnv = {
@@ -220,6 +221,17 @@ export async function loadState(): Promise<{ state: PortalState; storage: "datab
     }
     state.discussions = Array.isArray(state.discussions) ? state.discussions : [];
     state.notifications = Array.isArray(state.notifications) ? state.notifications : [];
+    if (state.version < 3) {
+      const now = new Date().toISOString();
+      const previousRevision = state.revision;
+      routePendingRequests(state, true, now);
+      state.version = 3;
+      state.revision = previousRevision + 1;
+      state.audit.unshift({ id: crypto.randomUUID(), at: now, by: "Система", action: "Роль керівника картки перейменовано на ініціатора; незакриті погодження спрямовано ініціаторам; координатор отримує загальний перегляд", entityId: "portal" });
+      const migrated = await db.prepare("UPDATE portal_state SET payload = ?, revision = ?, updated_at = ?, updated_by = ? WHERE id = ? AND revision = ?")
+        .bind(JSON.stringify(state), state.revision, now, "Система", "main", previousRevision).run();
+      if (migrated.meta.changes !== 1) return loadState();
+    }
     return { state, storage: "database" };
   }
   const state = seedState();
@@ -366,8 +378,8 @@ export async function currentUser(request: Request, state?: PortalState): Promis
   return user ? { ...user, authMode: row.auth_mode } : null;
 }
 
-export function mayEdit(user: SessionUser, nodeOwnerId?: string) {
-  return ["owner", "admin", "goal_owner", "cycle_owner", "coordinator"].includes(user.role) || user.id === nodeOwnerId;
+export function mayEdit(user: SessionUser, initiatorId?: string) {
+  return ["owner", "admin", "goal_owner", "cycle_owner"].includes(user.role) || user.id === initiatorId;
 }
 
 export function jsonError(message: string, status: number) {

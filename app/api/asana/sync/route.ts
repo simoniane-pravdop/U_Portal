@@ -55,8 +55,8 @@ export async function POST(request: Request) {
   const body = (await request.json()) as SyncBody;
   const node = state.nodes.find((candidate) => candidate.id === body.nodeId);
   if (!node) return jsonError("Об’єкт порталу не знайдено", 404);
-  const mayRead = mayEdit(user, node.ownerId) || node.assigneeId === user.id || node.acceptorId === user.id || node.participantIds.includes(user.id);
-  if (!mayRead || body.action !== "read" && !mayEdit(user, node.ownerId) && node.assigneeId !== user.id) return jsonError("Недостатньо повноважень", 403);
+  const mayRead = mayEdit(user, node.acceptorId) || node.assigneeId === user.id || node.acceptorId === user.id || node.participantIds.includes(user.id);
+  if (!mayRead || body.action !== "read" && !mayEdit(user, node.acceptorId) && node.assigneeId !== user.id) return jsonError("Недостатньо повноважень", 403);
 
   try {
     let result: AsanaTaskEnvelope;

@@ -130,7 +130,7 @@ test("durable storage and integration bindings are declared", async () => {
   const stateRoute = await readFile(new URL("../app/api/state/route.ts", import.meta.url), "utf8");
   assert.match(stateRoute, /next\.notifications\.unshift/);
   assert.match(stateRoute, /startsWith\("Сповіщення"\)/);
-  assert.match(stateRoute, /addNotification\(node\?\.ownerId, acceptance\.nodeId, "acceptance"/);
+  assert.match(stateRoute, /addNotification\(acceptance\.acceptorId, acceptance\.nodeId, "acceptance"/);
   assert.match(stateRoute, /managesBlocker/);
   assert.match(stateRoute, /stateForUser/);
   assert.match(stateRoute, /mergeHiddenState/);
@@ -262,7 +262,7 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /portal:work-draft:\$\{currentUserId\}/);
   assert.doesNotMatch(source, /<tr key=\{node\.id\} onClick/);
   assert.match(source, /Координатор/);
-  assert.match(source, /Керівник вищої ланки/);
+  assert.match(source, /Ініціатор/);
   assert.match(source, /branchHasOpenBlocker/);
   assert.match(source, /HealthOverrideFields/);
   assert.match(source, /idea: "Ідея"/);
@@ -277,12 +277,12 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /Коментар до ризику \/ блокера/);
   assert.match(source, /health-comment-banner/);
   assert.match(source, /item\.health === "blocked" \|\| item\.health === "risk"/);
-  assert.match(source, /filter === "manage" && node\.ownerId === payload\.currentUser\.id/);
+  assert.doesNotMatch(source, /filter === "manage"/);
   assert.match(source, /filter === "acceptance"/);
   assert.match(source, /workFilterForUser/);
   assert.match(source, /hasWorkAccessForUser/);
   assert.match(source, /if \(!hasWorkAccessForUser\(node, payload\.currentUser\)\) \{ setView\("tree"\)/);
-  assert.ok(source.indexOf("node.ownerId === user.id") < source.indexOf("node.acceptorId === user.id"));
+  assert.doesNotMatch(source, /node\.ownerId/);
   assert.match(source, /node\.participantIds\.includes\(payload\.currentUser\.id\)/);
   assert.match(source, /lacksRecentReport/);
   assert.match(source, /Немає звіту понад 5 днів/);
@@ -336,7 +336,8 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /За замовчуванням картку бачать лише її учасники/);
   assert.match(source, /selected\?\.kind === "cycle"/);
   assert.doesNotMatch(source, /Одиниця координації — підцикл/);
-  assert.match(source, /parent\.health = parent\.healthOverride \|\| calculatedHealth/);
+  const hierarchy = await readFile(new URL("../app/lib/hierarchy.ts", import.meta.url), "utf8");
+  assert.match(hierarchy, /parent\.health = parent\.healthOverride \|\| calculatedHealth/);
   assert.doesNotMatch(source, /Дерево УО|Створити УО|Паспорт УО|Нижчі УО|Тут виконується УО/);
   assert.doesNotMatch(source, /id: "integrations"/);
 });

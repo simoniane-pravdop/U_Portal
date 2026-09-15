@@ -1,15 +1,16 @@
 import { baseUrl, currentUser, database, jsonError, loadState, mayEdit, runtimeEnv } from "../../lib/server";
 import { notifyTelegramUsers } from "../../lib/telegram";
+import { approvalChangeError, isDerivedHierarchyChange, routePendingRequests } from "../../lib/responsibility";
 import type { PortalNotification, PortalState, SessionUser } from "../../types";
 
 export const dynamic = "force-dynamic";
 
 function visibleNodeIds(state: PortalState, user: SessionUser) {
-  if (["owner", "admin"].includes(user.role)) return new Set(state.nodes.map((node) => node.id));
+  if (["owner", "admin", "coordinator"].includes(user.role)) return new Set(state.nodes.map((node) => node.id));
   const ids = new Set<string>();
   const scopeRoots = new Set<string>();
   for (const node of state.nodes) {
-    const participates = node.ownerId === user.id || node.assigneeId === user.id || node.acceptorId === user.id || node.participantIds.includes(user.id);
+    const participates = node.assigneeId === user.id || node.acceptorId === user.id || node.participantIds.includes(user.id);
     if (node.visibility === "company" || participates) ids.add(node.id);
     if (participates) scopeRoots.add(node.id);
   }
@@ -105,6 +106,9 @@ export async function POST(request: Request) {
     );
   }
   body.state = mergeHiddenState(current, body.state, user);
+  const approvalError = approvalChangeError(current, body.state, user);
+  if (approvalError) return jsonError(approvalError, 403);
+  routePendingRequests(body.state);
   if (JSON.stringify(body.state.users) !== JSON.stringify(current.users)) {
     return jsonError("Користувачі та права змінюються лише в налаштуваннях порталу", 403);
   }
@@ -125,11 +129,12 @@ export async function POST(request: Request) {
     const before = current.nodes.find((node) => node.id === id);
     const after = body.state.nodes.find((node) => node.id === id);
     if (!after) return jsonError("Записи не видаляються фізично — використайте контрольоване вилучення з дерева", 400);
-    const mayCreate = !before && ["owner", "admin", "goal_owner", "cycle_owner", "coordinator"].includes(user.role);
-    const resolvesDecision = [...current.decisions, ...body.state.decisions].some((decision) => decision.nodeId === id && decision.decisionOwnerId === user.id);
-    const managesBlocker = [...current.blockers, ...body.state.blockers].some((blocker) => blocker.nodeId === id && (blocker.escalationToId === user.id || blocker.ownerId === user.id));
-    const mayChange = before && (mayEdit(user, before.ownerId) || before.assigneeId === user.id || before.acceptorId === user.id || resolvesDecision || managesBlocker);
-    if (!mayCreate && !mayChange) return jsonError("Недостатньо повноважень для однієї зі змін", 403);
+    if (before && before.acceptorId !== after.acceptorId && !mayEdit(user, before.acceptorId)) return jsonError("Змінити ініціатора може лише поточний ініціатор або керівник з правом редагування.", 403);
+    const mayCreate = !before && ["owner", "admin", "goal_owner", "cycle_owner"].includes(user.role);
+    const resolvesDecision = current.decisions.some((decision) => decision.nodeId === id && decision.decisionOwnerId === user.id);
+    const managesBlocker = current.blockers.some((blocker) => blocker.nodeId === id && (blocker.escalationToId === user.id || blocker.ownerId === user.id));
+    const mayChange = before && (mayEdit(user, before.acceptorId) || before.assigneeId === user.id || before.acceptorId === user.id || resolvesDecision || managesBlocker);
+    if (!mayCreate && !mayChange && !isDerivedHierarchyChange(current, body.state, id)) return jsonError("Недостатньо повноважень для однієї зі змін", 403);
   }
 
   const affectedNodeIds = new Set<string>();
@@ -155,9 +160,9 @@ export async function POST(request: Request) {
     if (JSON.stringify(before) === JSON.stringify(after)) continue;
     const nodeId = after?.nodeId || before?.nodeId;
     const node = current.nodes.find((candidate) => candidate.id === nodeId) || body.state.nodes.find((candidate) => candidate.id === nodeId);
-    const addressed = [...(current.discussions || []), ...(body.state.discussions || [])].some((message) => message.nodeId === nodeId && message.recipientId === user.id);
-    const authored = before?.authorId === user.id || after?.authorId === user.id;
-    if (!node || !(mayEdit(user, node.ownerId) || node.assigneeId === user.id || node.acceptorId === user.id || node.participantIds.includes(user.id) || addressed || authored)) {
+    const addressed = (current.discussions || []).some((message) => message.nodeId === nodeId && message.recipientId === user.id);
+    const authored = before?.authorId === user.id;
+    if (!node || !(mayEdit(user, node.acceptorId) || node.assigneeId === user.id || node.acceptorId === user.id || node.participantIds.includes(user.id) || addressed || authored)) {
       return jsonError("Недостатньо повноважень для повідомлення в цій картці", 403);
     }
   }
@@ -175,9 +180,9 @@ export async function POST(request: Request) {
   }
   for (const id of affectedNodeIds) {
     const node = current.nodes.find((candidate) => candidate.id === id) || body.state.nodes.find((candidate) => candidate.id === id);
-    const decides = [...current.decisions, ...body.state.decisions].some((decision) => decision.nodeId === id && decision.decisionOwnerId === user.id);
-    const managesBlocker = [...current.blockers, ...body.state.blockers].some((blocker) => blocker.nodeId === id && (blocker.escalationToId === user.id || blocker.ownerId === user.id));
-    if (!node || !(mayEdit(user, node.ownerId) || node.assigneeId === user.id || node.acceptorId === user.id || decides || managesBlocker)) {
+    const decides = current.decisions.some((decision) => decision.nodeId === id && decision.decisionOwnerId === user.id);
+    const managesBlocker = current.blockers.some((blocker) => blocker.nodeId === id && (blocker.escalationToId === user.id || blocker.ownerId === user.id));
+    if (!node || !(mayEdit(user, node.acceptorId) || node.assigneeId === user.id || node.acceptorId === user.id || decides || managesBlocker)) {
       return jsonError("Недостатньо повноважень для пов’язаної зміни", 403);
     }
   }
@@ -199,7 +204,7 @@ export async function POST(request: Request) {
     };
     const relatedUsers = (nodeId: string) => {
       const node = next.nodes.find((candidate) => candidate.id === nodeId);
-      return node ? [...new Set([node.ownerId, node.assigneeId, node.acceptorId, ...node.participantIds])] : [];
+      return node ? [...new Set([node.assigneeId, node.acceptorId, ...node.participantIds])] : [];
     };
     const newMessages = (next.discussions || []).filter((message) => !(current.discussions || []).some((existing) => existing.id === message.id));
     for (const message of newMessages) {
@@ -220,7 +225,6 @@ export async function POST(request: Request) {
       const node = next.nodes.find((candidate) => candidate.id === acceptance.nodeId);
       if (!before) {
         addNotification(acceptance.acceptorId, acceptance.nodeId, "acceptance", `Результат очікує приймання · ${node?.code || "картка"}`, node?.title || acceptance.evidenceNote);
-        addNotification(node?.ownerId, acceptance.nodeId, "acceptance", `Завдання передано на приймання · ${node?.code || "картка"}`, `${node?.title || acceptance.evidenceNote}. Приймання виконує керівник вищої ланки.`);
       }
       else if (before.status !== acceptance.status) addNotification(acceptance.submittedBy, acceptance.nodeId, "acceptance", acceptance.status === "accepted" ? `Результат прийнято · ${node?.code || "картка"}` : `Результат повернуто · ${node?.code || "картка"}`, acceptance.feedback);
     }
@@ -237,7 +241,7 @@ export async function POST(request: Request) {
       const before = current.nodes.find((node) => node.id === id);
       const after = next.nodes.find((node) => node.id === id);
       if (!after) continue;
-      const recipients = [...new Set([after.ownerId, after.assigneeId, after.acceptorId, ...after.participantIds])];
+      const recipients = [...new Set([after.assigneeId, after.acceptorId, ...after.participantIds])];
       for (const recipientId of recipients) {
         const delegated = recipientId === after.assigneeId && before?.assigneeId !== after.assigneeId;
         const type: PortalNotification["type"] = !before ? "created" : delegated ? "delegation" : before.lifecycle !== "completed" && after.lifecycle === "completed" ? "completed" : "updated";
@@ -248,7 +252,7 @@ export async function POST(request: Request) {
     next.notifications = next.notifications.slice(0, 1000);
   }
   next.revision = current.revision + 1;
-  next.version = Math.max(2, next.version || 2);
+  next.version = Math.max(3, next.version || 3);
   next.audit = [
     {
       id: crypto.randomUUID(),
@@ -292,7 +296,7 @@ export async function POST(request: Request) {
           : createdAcceptance
             ? [createdAcceptance.acceptorId]
             : becameUnhealthy || reported
-              ? [node.ownerId, node.acceptorId]
+              ? [node.acceptorId]
               : [];
       if (recipients.length) {
         const detail = createdBlocker ? `\nБлокер: ${createdBlocker.title}` : createdDecision ? `\nПотрібне рішення: ${createdDecision.question}` : becameUnhealthy ? `\nСтан: ${node.health === "blocked" ? "заблоковано" : "є ризик"}` : "";

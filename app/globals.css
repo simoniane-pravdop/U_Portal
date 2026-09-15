@@ -1386,13 +1386,13 @@ body { font-size: 14px; }
 .tree-code, .health-badge, .decision-badge { font-size: 11px; }
 .node-detail-head h2 { font-size: 24px; }
 .node-detail-head p { font-size: 14px; }
-.detail-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .detail-grid article > span { font-size: 11px; }
 .detail-grid article > strong, .person-line strong { font-size: 13px; }
 .detail-grid article > small, .person-line small { font-size: 11px; }
 .detail-section dt { font-size: 11px; }
 .detail-section dd { font-size: 13px; }
-.work-summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.work-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .work-desk-head h2 { font-size: 23px; }
 .work-desk-head p, .work-section > p { font-size: 13px; }
 .work-list-row > div span { font-size: 11px; }
@@ -1404,7 +1404,7 @@ body { font-size: 14px; }
 .form-grid input, .form-grid select, .form-grid textarea, .status-form-grid input, .status-form-grid select, .status-form-grid textarea { font-size: 14px !important; }
 .modal-card > header h2 { font-size: 20px; }
 .modal-card > header span, .modal-card > footer button { font-size: 12px; }
-.responsibility-fields { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 11px; }
+.responsibility-fields { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; }
 
 .work-inbox { top: 16px; }
 .work-desk-actions { position: relative; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
