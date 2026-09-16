@@ -11,5 +11,5 @@ export function missingActiveTasksReason(node: CoordinationNode, branch: Coordin
     && !["idea", "completed", "cancelled"].includes(item.lifecycle));
   if (hasActiveTask) return null;
 
-  return node.kind === "cycle" ? "Цикл без активних завдань" : "Підцикл без активних завдань";
+  return node.kind === "cycle" ? "Напрям зусиль без активних завдань" : "Проект без активних завдань";
 }

@@ -8,11 +8,11 @@ export async function generateMetadata(): Promise<Metadata> {
   const protocol = incoming.get("x-forwarded-proto") || (host.startsWith("localhost") ? "http" : "https");
   const image = `${protocol}://${host}/og.png`;
   const title = "Управлінський портал · Правова Допомога";
-  const description = "Стратегічні цілі, управлінські цикли, завдання, блокери, рішення та звітність в одному дереві.";
+  const description = "Стратегічні цілі, напрями зусиль, завдання, блокери, рішення та звітність в одному дереві.";
   return {
     title,
     description,
-    openGraph: { title, description, type: "website", locale: "uk_UA", images: [{ url: image, width: 1536, height: 1024, alt: "Управлінський портал — цілі, цикли та рішення" }] },
+    openGraph: { title, description, type: "website", locale: "uk_UA", images: [{ url: image, width: 1536, height: 1024, alt: "Управлінський портал — цілі, напрями зусиль та рішення" }] },
     twitter: { card: "summary_large_image", title, description, images: [image] },
   };
 }

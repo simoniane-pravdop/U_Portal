@@ -8,7 +8,7 @@ type TelegramMessage = {
 };
 type TelegramUpdate = { update_id?: number; message?: TelegramMessage };
 
-const help = "Команди:\n/my — мої відкриті цілі, цикли й завдання\n/help — підказка\n/stop — від’єднати Telegram від порталу";
+const help = "Команди:\n/my — мої відкриті цілі, напрями зусиль й завдання\n/help — підказка\n/stop — від’єднати Telegram від порталу";
 
 export async function POST(request: Request) {
   const configuredSecret = runtimeEnv().TELEGRAM_WEBHOOK_SECRET || "";

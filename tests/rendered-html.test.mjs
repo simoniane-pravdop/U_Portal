@@ -18,7 +18,7 @@ test("coordination flags open cycles and subcycles without active descendant tas
   const reasons = (target, nodes) => coordinationAttentionReasons({ nodes, blockers: [], decisions: [], acceptances: [], discussions: [] }, target);
   for (const kind of ["cycle", "subcycle"]) {
     const parent = node("parent", kind);
-    const expected = kind === "cycle" ? "Цикл без активних завдань" : "Підцикл без активних завдань";
+    const expected = kind === "cycle" ? "Напрям зусиль без активних завдань" : "Проект без активних завдань";
     assert.deepEqual(reasons(parent, [parent]), [expected]);
     for (const status of ["completed", "cancelled", "idea"]) {
       assert.deepEqual(reasons(parent, [parent, node("task", "task", parent.id, status)]), [expected]);
@@ -44,7 +44,7 @@ test("coordination flags open cycles and subcycles without active descendant tas
   const subcycle = node("subcycle", "subcycle", cycle.id);
   const mixed = [cycle, subcycle, node("finished", "task", subcycle.id, "completed"), node("active", "task", cycle.id)];
   assert.deepEqual(reasons(cycle, mixed), []);
-  assert.deepEqual(reasons(subcycle, mixed), ["Підцикл без активних завдань"]);
+  assert.deepEqual(reasons(subcycle, mixed), ["Проект без активних завдань"]);
   assert.deepEqual(reasons(node("goal", "goal"), []), []);
   assert.deepEqual(reasons(node("task", "task"), []), []);
 });
@@ -142,7 +142,7 @@ test("durable storage and integration bindings are declared", async () => {
 
 test("management workflow separates structure, work, dashboard, settings, and access", async () => {
   const source = await readFile(new URL("../app/PortalApp.tsx", import.meta.url), "utf8");
-  assert.match(source, /Дерево цілей, циклів і завдань/);
+  assert.match(source, /Дерево цілей, напрямів зусиль, проектів і завдань/);
   assert.match(source, /Зберегти стан і подати звіт/);
   assert.match(source, /Результати, стани та управлінська реакція/);
   assert.match(source, /Редактор учасників/);
@@ -212,7 +212,7 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /kindLabels\[ancestor\.kind\].*ancestor\.title/);
   assert.match(source, /return \["cycle", "subcycle"\]/);
   assert.match(source, /Додати завдання/);
-  assert.match(source, /Завдання можна включити безпосередньо в управлінський цикл або в його підцикл/);
+  assert.match(source, /Завдання можна включити безпосередньо в напрям зусиль або в його проект/);
   assert.match(source, /portal:node-draft/);
   assert.match(source, /Дані автоматично оновлено/);
   assert.match(source, /Питання, рішення, погодження та коментарі/);
@@ -246,11 +246,11 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /Перепідключити акаунт/);
   assert.match(source, /Відключити акаунт/);
   assert.match(source, /Шлях координації/);
-  assert.match(source, /Координація циклу \$\{node\.code\}: \$\{node\.title\}/);
+  assert.match(source, /Координація напряму зусиль \$\{node\.code\}: \$\{node\.title\}/);
   assert.match(source, /Рівень, статус і стан/);
   assert.match(source, /value="goal">Цілі/);
-  assert.match(source, /value="cycle">Цикли/);
-  assert.match(source, /value="subcycle">Підцикли/);
+  assert.match(source, /value="cycle">Напрями зусиль/);
+  assert.match(source, /value="subcycle">Проекти/);
   assert.match(source, /value="task">Завдання/);
   assert.doesNotMatch(source, /Обрати картку/);
   assert.match(source, /work-advanced-filters/);
@@ -293,12 +293,12 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /item === "acceptance" \? "Приймаю"/);
   assert.doesNotMatch(source, /Власник результату|Приймає результат/);
   assert.doesNotMatch(source, /Робочий контур/);
-  assert.match(source, /Координація за управлінськими циклами/);
+  assert.match(source, /Координація за напрямами зусиль/);
   assert.match(source, /coordination-filter-bar/);
   assert.match(source, /useState<"all" \| NodeKind>\("all"\)/);
   assert.match(source, /level === "all" \|\| node\.kind === level/);
-  assert.match(source, /Пошук цілі, циклу, підциклу або завдання/);
-  assert.match(source, /Предмет координації — зведений стан усіх завдань циклу/);
+  assert.match(source, /Пошук цілі, напряму зусиль, проекту або завдання/);
+  assert.match(source, /Предмет координації — зведений стан усіх завдань напряму зусиль/);
   assert.match(source, /Потребує координації/);
   assert.match(source, /matchesExecutorAndState/);
   assert.match(source, /item\.assigneeId === ownerId/);
@@ -315,7 +315,7 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /toggleStructure/);
   assert.match(source, /toggleReports/);
   assert.match(source, /toggleEverything/);
-  assert.match(source, /Стратегічна ціль → управлінський цикл → підцикл → завдання → три останні звіти/);
+  assert.match(source, /Стратегічна ціль → напрям зусиль → проект → завдання → три останні звіти/);
   assert.match(source, /useState<Set<string>>\(\(\) => new Set\(\)\)/);
   assert.match(source, /goals\.map\(\(goal\) => renderCoordinationRow\(goal\)\)/);
   assert.match(source, /Календар строків і координацій/);
@@ -335,7 +335,7 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /!\["acceptance", "completed"\]\.includes\(value\)/);
   assert.match(source, /За замовчуванням картку бачать лише її учасники/);
   assert.match(source, /selected\?\.kind === "cycle"/);
-  assert.doesNotMatch(source, /Одиниця координації — підцикл/);
+  assert.doesNotMatch(source, /Одиниця координації — проект/);
   const hierarchy = await readFile(new URL("../app/lib/hierarchy.ts", import.meta.url), "utf8");
   assert.match(hierarchy, /parent\.health = parent\.healthOverride \|\| calculatedHealth/);
   assert.doesNotMatch(source, /Дерево УО|Створити УО|Паспорт УО|Нижчі УО|Тут виконується УО/);
