@@ -1445,6 +1445,11 @@ body { font-size: 14px; }
 .tree-evidence h3 { margin: 0 0 10px; font: 800 15px Georgia, serif; color: var(--navy-900); }
 .tree-evidence article { padding: 9px 0; border-top: 1px solid var(--line-soft); }
 .tree-evidence article p { margin: 5px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.node-detail .discussion-compose { display: flex; flex-wrap: wrap; gap: 10px; }
+.node-detail .discussion-compose select { flex: 1 1 180px; min-width: 0; font-size: 12px; }
+.node-detail .discussion-compose .comment-response-toggle { flex: 1 1 180px; min-width: 0; font-size: 11px; white-space: normal; }
+.node-detail .discussion-compose textarea { flex: 1 0 100%; min-width: 0; min-height: 90px; font-size: 13px; }
+.node-detail .discussion-compose > button { margin-left: auto; min-height: 38px; font-size: 12px; }
 .tree-work-snapshot > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 12px 14px; border-bottom: 1px solid #dce6ef; background: #eef5fa; }
 .tree-work-snapshot > header > div { min-width: 0; }
 .tree-work-snapshot > header span { color: var(--gold); font-size: 11px; font-weight: 900; text-transform: uppercase; }
