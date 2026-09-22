@@ -1430,6 +1430,21 @@ body { font-size: 14px; }
 .detail-columns.info-only { grid-template-columns: minmax(0, 1fr); }
 .detail-columns.info-only > aside { display: none !important; }
 .tree-work-snapshot { margin: 12px 16px 4px; overflow: hidden; border: 1px solid #c7d7e6; border-radius: 10px; background: #f6f9fc; }
+.tree-passport { margin: 14px 16px 0; background: #fff; }
+.tree-passport summary { padding: 13px; }
+.tree-passport summary span { font-size: 11px; }
+.tree-passport summary strong { font-size: 17px; }
+.tree-passport summary small { font-size: 12px; }
+.tree-passport .work-card-description-body { grid-template-columns: minmax(0, 1fr); }
+.tree-passport .work-card-description-body section { padding: 13px; }
+.tree-passport .work-card-description-body h4 { font-size: 15px; }
+.tree-passport .work-card-description-body dt { font-size: 11px; }
+.tree-passport .work-card-description-body dd { font-size: 14px; line-height: 1.5; }
+.work-card-description-body dd a, .tree-evidence a { color: #145892; text-decoration: underline; overflow-wrap: anywhere; }
+.tree-evidence { margin: 12px 16px; padding: 14px; border: 1px solid var(--line-soft); border-radius: 9px; background: #fff; }
+.tree-evidence h3 { margin: 0 0 10px; font: 800 15px Georgia, serif; color: var(--navy-900); }
+.tree-evidence article { padding: 9px 0; border-top: 1px solid var(--line-soft); }
+.tree-evidence article p { margin: 5px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .tree-work-snapshot > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 12px 14px; border-bottom: 1px solid #dce6ef; background: #eef5fa; }
 .tree-work-snapshot > header > div { min-width: 0; }
 .tree-work-snapshot > header span { color: var(--gold); font-size: 11px; font-weight: 900; text-transform: uppercase; }
@@ -1523,6 +1538,7 @@ body { font-size: 14px; }
   .work-desk-actions { justify-content: space-between; }
   .work-card-sections { top: 0; padding-inline: 10px; }
   .tree-work-snapshot { margin-inline: 10px; }
+  .tree-passport, .tree-evidence { margin-inline: 10px; }
   .tree-snapshot-summary, .tree-snapshot-streams { grid-template-columns: 1fr; }
   .tree-snapshot-summary dl { grid-template-columns: 1fr; }
   .open-blockers-panel { margin-inline: 10px; }

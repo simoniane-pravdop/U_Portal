@@ -185,7 +185,8 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /Підключити Telegram/);
   assert.match(source, /recalculateHierarchy/);
   assert.match(source, /firstAvailableNumber/);
-  assert.match(source, /Intl\.Collator\("uk", \{ numeric: true/);
+  const nodeOrder = await readFile(new URL("../app/lib/node-order.ts", import.meta.url), "utf8");
+  assert.match(nodeOrder, /Intl\.Collator\("uk", \{ numeric: true/);
   assert.match(source, /sort\(compareNodeCodes\)/);
   assert.match(source, /useState<"open" \| "all" \| "active" \| "risk" \| "completed" \| "no_report_5d">\("open"\)/);
   assert.match(source, /Усі без завершених/);
