@@ -30,6 +30,16 @@ test("management codes sort numerically, independent of creation date", async ()
   assert.deepEqual(items.sort(compareNodeCodes).map((item) => item.code), ["P1", "P1.2", "P1.10", "P2", "P8", "P10"]);
 });
 
+test("actual milestones are hidden from direction and project cards, but remain on tasks", async () => {
+  const { showActualMilestones } = await loadComponent("../app/lib/node-date-visibility.ts");
+  assert.equal(showActualMilestones("cycle"), false);
+  assert.equal(showActualMilestones("subcycle"), false);
+  assert.equal(showActualMilestones("goal"), true);
+  assert.equal(showActualMilestones("task"), true);
+  const source = await readFile(new URL("../app/PortalApp.tsx", import.meta.url), "utf8");
+  assert.match(source, /showActualMilestones\(node\.kind\)/);
+});
+
 test("Asana links in filled card fields are clickable and safe", async () => {
   const { LinkedText } = await loadComponent("../app/components/LinkedText.tsx", true);
   const html = renderToStaticMarkup(createElement(LinkedText, { value: "Asana · https://app.asana.com/0/123/456. Інше: javascript:alert(1) <script>" }));
