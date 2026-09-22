@@ -54,6 +54,19 @@ test("Asana links display the task title when known, with an honest fallback", a
   assert.doesNotMatch(html, />https:\/\/app\.asana\.com/);
 });
 
+test("creation metadata uses the saved author and timestamp, with an audit-only legacy fallback", async () => {
+  const { nodeCreation } = await loadComponent("../app/lib/node-creation.ts");
+  const audit = [{ entityId: "node-1", action: "Створено P1.1", by: "Початковий автор", at: "2026-08-25T13:00:00.000Z" }];
+  const users = [{ id: "author-1", name: "Едгар Сімонян" }];
+  assert.deepEqual(nodeCreation({ id: "node-1", createdById: "author-1", createdAt: "2026-09-22T10:00:00.000Z" }, audit, users), { name: "Едгар Сімонян", at: "2026-09-22T10:00:00.000Z" });
+  assert.deepEqual(nodeCreation({ id: "node-1", createdAt: "2026-08-24T10:00:00.000Z" }, audit, users), { name: "Початковий автор", at: "2026-08-25T13:00:00.000Z" });
+  assert.deepEqual(nodeCreation({ id: "node-2", createdAt: "2026-08-24T10:00:00.000Z" }, audit, users), { name: "Не зафіксовано", at: "" });
+  const route = await readFile(new URL("../app/api/state/route.ts", import.meta.url), "utf8");
+  assert.match(route, /node\.createdAt = savedAt/);
+  assert.match(route, /node\.createdById = user\.id/);
+  assert.match(route, /node\.createdAt = before\.createdAt/);
+});
+
 test("tree passport opens filled fields before the work snapshot", async () => {
   const source = await readFile(new URL("../app/PortalApp.tsx", import.meta.url), "utf8");
   const passport = source.indexOf('<WorkCardDescription node={selected} payload={payload} userById={userById} expanded />');

@@ -120,6 +120,8 @@ export type WorkNode = {
   recurrence: Recurrence;
   asana: AsanaLink;
   createdAt: string;
+  /** Assigned by the server when the card is first saved; absent on older cards. */
+  createdById?: string;
   updatedAt: string;
 };
 

@@ -118,6 +118,20 @@ export async function POST(request: Request) {
     if (!mayCreate && !mayChange && !isDerivedHierarchyChange(current, body.state, id)) return jsonError("Недостатньо повноважень для однієї зі змін", 403);
   }
 
+  // Creation provenance is assigned at the actual first save, not when a blank form opens.
+  const savedAt = new Date().toISOString();
+  for (const node of body.state.nodes) {
+    const before = current.nodes.find((candidate) => candidate.id === node.id);
+    if (before) {
+      node.createdAt = before.createdAt;
+      if (before.createdById) node.createdById = before.createdById;
+      else delete node.createdById;
+    } else {
+      node.createdAt = savedAt;
+      node.createdById = user.id;
+    }
+  }
+
   const affectedNodeIds = new Set<string>();
   const collectChanged = <T extends { id: string }>(before: T[], after: T[], nodeIdsFor: (item: T) => string[]) => {
     const ids = new Set([...before.map((item) => item.id), ...after.map((item) => item.id)]);
