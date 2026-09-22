@@ -237,6 +237,7 @@ export type AuditEntry = {
   by: string;
   action: string;
   entityId: string;
+  changes?: { field: string; label: string; from: string; to: string }[];
 };
 
 export type PortalNotification = {

@@ -1,6 +1,7 @@
 import { baseUrl, currentUser, database, jsonError, loadState, mayEdit, runtimeEnv } from "../../lib/server";
 import { notifyTelegramUsers } from "../../lib/telegram";
 import { approvalChangeError, isDerivedHierarchyChange, routePendingRequests } from "../../lib/responsibility";
+import { nodeAuditChanges } from "../../lib/node-audit";
 import type { PortalNotification, PortalState, SessionUser } from "../../types";
 
 export const dynamic = "force-dynamic";
@@ -265,16 +266,22 @@ export async function POST(request: Request) {
   }
   next.revision = current.revision + 1;
   next.version = Math.max(3, next.version || 3);
+  const auditAt = new Date().toISOString();
+  const nodeEvents = changedNodeIds.map((id) => {
+    const before = current.nodes.find((node) => node.id === id);
+    const after = next.nodes.find((node) => node.id === id)!;
+    return {
+      id: crypto.randomUUID(), at: auditAt, by: user.name,
+      action: id === body.entityId ? body.action || `Оновлено ${after.code}` : before ? `Автоматично оновлено ${after.code} разом із пов’язаною карткою` : `Створено ${after.code}`,
+      entityId: id,
+      changes: before ? nodeAuditChanges(before, after, next.users, [...current.nodes, ...next.nodes]) : [],
+    };
+  });
   next.audit = [
-    {
-      id: crypto.randomUUID(),
-      at: new Date().toISOString(),
-      by: user.name,
-      action: body.action || "Оновлено дані порталу",
-      entityId: body.entityId || "portal",
-    },
+    ...nodeEvents,
+    ...(nodeEvents.some((entry) => entry.entityId === body.entityId) ? [] : [{ id: crypto.randomUUID(), at: auditAt, by: user.name, action: body.action || "Оновлено дані порталу", entityId: body.entityId || "portal" }]),
     ...(Array.isArray(next.audit) ? next.audit : []),
-  ].slice(0, 500);
+  ].slice(0, 2000);
 
   if (db) {
     const now = new Date().toISOString();
