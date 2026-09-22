@@ -12,6 +12,7 @@ const noImports = (source) => source.replace(/^import .*;\n/gm, "");
 const server = await read("app/lib/server.ts");
 const ui = await read("app/PortalApp.tsx");
 const source = [
+  noImports(await read("app/lib/forecast-deadline.ts")),
   noImports(await read("app/lib/hierarchy.ts")),
   noImports(await read("app/lib/responsibility.ts")),
   declarations(server, ["mayEdit", "jsonError"]),
@@ -165,5 +166,25 @@ test("executor can update own work with automatic parent rollup but cannot edit 
     assert.equal((await response.json()).nodes.find((node) => node.id === "parent").progress, 50);
     const denied = await post(state, actor, (next) => { next.nodes.find((node) => node.id === "parent").title = "Forged"; });
     assert.equal(denied.status, 403);
+  }
+});
+
+test("executor's later forecast can extend its card and derived parent deadline", async () => {
+  const state = fixture();
+  state.nodes = [
+    makeNode("parent", { kind: "cycle", assigneeId: "other", acceptorId: "other", plannedEnd: "2026-09-30", forecastEnd: "2026-09-30" }),
+    makeNode("task", { parentId: "parent", plannedEnd: "2026-09-30", forecastEnd: "2026-09-30" }),
+  ];
+  const response = await post(state, executor, (next) => {
+    const task = next.nodes.find((node) => node.id === "task");
+    task.forecastEnd = "2026-10-14";
+    task.plannedEnd = rules.plannedEndForForecast(task.plannedEnd, task.forecastEnd);
+    rules.recalculateHierarchy(next);
+  });
+  assert.equal(response.status, 200);
+  const saved = await response.json();
+  for (const node of saved.nodes) {
+    assert.equal(node.forecastEnd, "2026-10-14");
+    assert.equal(node.plannedEnd, "2026-10-14");
   }
 });

@@ -1,4 +1,5 @@
 import type { PortalState, WorkNode } from "../types";
+import { plannedEndForForecast } from "./forecast-deadline";
 
 export function recalculateHierarchy(state: PortalState) {
   const active = state.nodes.filter((node) => !node.archived);
@@ -18,12 +19,12 @@ export function recalculateHierarchy(state: PortalState) {
   const parents = active.filter((node) => node.kind !== "task").sort((a, b) => depth(b) - depth(a));
   for (const parent of parents) {
     const children = active.filter((node) => node.parentId === parent.id);
-    const before = JSON.stringify({ progress: parent.progress, health: parent.health, decisionRequired: parent.decisionRequired, lifecycle: parent.lifecycle, forecastEnd: parent.forecastEnd });
+    const before = JSON.stringify({ progress: parent.progress, health: parent.health, decisionRequired: parent.decisionRequired, lifecycle: parent.lifecycle, forecastEnd: parent.forecastEnd, plannedEnd: parent.plannedEnd });
     const calculatedHealth = state.blockers.some((item) => item.nodeId === parent.id && item.status === "open") ? "blocked" : "normal";
     parent.health = parent.healthOverride || calculatedHealth;
     parent.decisionRequired = state.decisions.some((item) => item.nodeId === parent.id && item.status === "requested");
     if (!children.length) {
-      const after = JSON.stringify({ progress: parent.progress, health: parent.health, decisionRequired: parent.decisionRequired, lifecycle: parent.lifecycle, forecastEnd: parent.forecastEnd });
+      const after = JSON.stringify({ progress: parent.progress, health: parent.health, decisionRequired: parent.decisionRequired, lifecycle: parent.lifecycle, forecastEnd: parent.forecastEnd, plannedEnd: parent.plannedEnd });
       if (before !== after) parent.updatedAt = new Date().toISOString();
       continue;
     }
@@ -37,9 +38,11 @@ export function recalculateHierarchy(state: PortalState) {
     else if (meaningful.length && meaningful.every((child) => child.lifecycle === "ready")) parent.lifecycle = "ready";
     else if (meaningful.length && meaningful.every((child) => child.lifecycle === "paused")) parent.lifecycle = "paused";
     else parent.lifecycle = "planned";
+    const previousForecast = parent.forecastEnd;
     const forecasts = children.map((child) => child.forecastEnd || child.plannedEnd).filter(Boolean).sort();
     if (forecasts.length) parent.forecastEnd = forecasts.at(-1) || parent.forecastEnd;
-    const after = JSON.stringify({ progress: parent.progress, health: parent.health, decisionRequired: parent.decisionRequired, lifecycle: parent.lifecycle, forecastEnd: parent.forecastEnd });
+    if (parent.forecastEnd !== previousForecast) parent.plannedEnd = plannedEndForForecast(parent.plannedEnd, parent.forecastEnd);
+    const after = JSON.stringify({ progress: parent.progress, health: parent.health, decisionRequired: parent.decisionRequired, lifecycle: parent.lifecycle, forecastEnd: parent.forecastEnd, plannedEnd: parent.plannedEnd });
     if (before !== after) parent.updatedAt = new Date().toISOString();
   }
 }
