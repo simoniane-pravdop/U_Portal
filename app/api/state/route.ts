@@ -6,27 +6,8 @@ import type { PortalNotification, PortalState, SessionUser } from "../../types";
 export const dynamic = "force-dynamic";
 
 function visibleNodeIds(state: PortalState, user: SessionUser) {
-  if (["owner", "admin", "coordinator"].includes(user.role)) return new Set(state.nodes.map((node) => node.id));
-  const ids = new Set<string>();
-  const scopeRoots = new Set<string>();
-  for (const node of state.nodes) {
-    const participates = node.assigneeId === user.id || node.acceptorId === user.id || node.participantIds.includes(user.id);
-    if (node.visibility === "company" || participates) ids.add(node.id);
-    if (participates) scopeRoots.add(node.id);
-  }
-  for (const message of state.discussions || []) if (message.authorId === user.id || message.recipientId === user.id) ids.add(message.nodeId);
-  for (const decision of state.decisions) if (decision.decisionOwnerId === user.id) ids.add(decision.nodeId);
-  for (const blocker of state.blockers) if (blocker.ownerId === user.id || blocker.escalationToId === user.id) ids.add(blocker.nodeId);
-  for (const acceptance of state.acceptances) if (acceptance.submittedBy === user.id || acceptance.acceptorId === user.id) ids.add(acceptance.nodeId);
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const node of state.nodes) {
-      if (node.parentId && scopeRoots.has(node.parentId) && !scopeRoots.has(node.id)) { scopeRoots.add(node.id); ids.add(node.id); changed = true; }
-      if (ids.has(node.id) && node.parentId && !ids.has(node.parentId)) { ids.add(node.parentId); changed = true; }
-    }
-  }
-  return ids;
+  // Portal access is authenticated; participation controls actions, not reading.
+  return new Set(user.active ? state.nodes.map((node) => node.id) : []);
 }
 
 function stateForUser(state: PortalState, user: SessionUser): PortalState {
@@ -162,8 +143,25 @@ export async function POST(request: Request) {
     const node = current.nodes.find((candidate) => candidate.id === nodeId) || body.state.nodes.find((candidate) => candidate.id === nodeId);
     const addressed = (current.discussions || []).some((message) => message.nodeId === nodeId && message.recipientId === user.id);
     const authored = before?.authorId === user.id;
-    if (!node || !(mayEdit(user, node.acceptorId) || node.assigneeId === user.id || node.acceptorId === user.id || node.participantIds.includes(user.id) || addressed || authored)) {
+    const participant = node && (mayEdit(user, node.acceptorId) || node.assigneeId === user.id || node.acceptorId === user.id || node.participantIds.includes(user.id) || addressed || authored);
+    const readerMessage = !before && after && ["comment", "question", "issue"].includes(after.kind);
+    if (!node || !(participant || readerMessage)) {
       return jsonError("Недостатньо повноважень для повідомлення в цій картці", 403);
+    }
+    if (!after) return jsonError("Повідомлення не видаляються фізично", 403);
+    if (!before && after.authorId !== user.id) return jsonError("Автором нового повідомлення має бути поточний користувач", 403);
+    if (readerMessage && (after.authorId !== user.id || !after.text.trim() || after.relatedType || after.relatedId || after.kind === "issue" && (after.recipientId !== node.assigneeId || !after.requiresResponse))) {
+      return jsonError("Повідомлення має створювати його автор; сигнал про перешкоду адресують виконавцю", 403);
+    }
+    if (before && after && (before.nodeId !== after.nodeId || before.authorId !== after.authorId || before.kind !== after.kind || before.createdAt !== after.createdAt)) {
+      return jsonError("Автор, тип і картка повідомлення не змінюються", 403);
+    }
+    if (before && (before.text !== after.text || before.deletedAt !== after.deletedAt || before.editedAt !== after.editedAt)) {
+      if (before.authorId !== user.id && !mayEdit(user, node.acceptorId) && node.acceptorId !== user.id) return jsonError("Редагувати повідомлення може його автор або ініціатор", 403);
+      if (before.text !== after.text && after.editedBy !== user.id || before.deletedAt !== after.deletedAt && after.deletedBy !== user.id) return jsonError("Автор зміни повідомлення має бути вказаний правильно", 403);
+    }
+    if (before && before.resolvedAt !== after.resolvedAt && ![before.authorId, before.recipientId, node.acceptorId].includes(user.id) && !mayEdit(user, node.acceptorId)) {
+      return jsonError("Закрити звернення може автор, адресат або ініціатор", 403);
     }
   }
   const currentNotifications = Array.isArray(current.notifications) ? current.notifications : [];
@@ -209,9 +207,9 @@ export async function POST(request: Request) {
     const newMessages = (next.discussions || []).filter((message) => !(current.discussions || []).some((existing) => existing.id === message.id));
     for (const message of newMessages) {
       const node = next.nodes.find((candidate) => candidate.id === message.nodeId);
-      const recipients = message.recipientId ? [message.recipientId] : relatedUsers(message.nodeId);
-      const type: PortalNotification["type"] = message.kind === "question" ? "question" : message.kind === "decision" ? "decision" : message.kind === "approval" ? "acceptance" : "comment";
-      const title = message.kind === "question" ? `Нове питання · ${node?.code || "картка"}` : message.kind === "decision" ? `Запит рішення · ${node?.code || "картка"}` : message.kind === "approval" ? `Погодження · ${node?.code || "картка"}` : `Новий коментар · ${node?.code || "картка"}`;
+      const recipients = message.kind === "issue" ? [node?.assigneeId, node?.acceptorId].filter((id): id is string => Boolean(id)) : message.recipientId ? [message.recipientId] : relatedUsers(message.nodeId);
+      const type: PortalNotification["type"] = ["question", "issue"].includes(message.kind) ? "question" : message.kind === "decision" ? "decision" : message.kind === "approval" ? "acceptance" : "comment";
+      const title = message.kind === "issue" ? `Повідомлення про перешкоду · ${node?.code || "картка"}` : message.kind === "question" ? `Нове питання · ${node?.code || "картка"}` : message.kind === "decision" ? `Запит рішення · ${node?.code || "картка"}` : message.kind === "approval" ? `Погодження · ${node?.code || "картка"}` : `Новий коментар · ${node?.code || "картка"}`;
       for (const recipientId of recipients) addNotification(recipientId, message.nodeId, type, title, message.text);
     }
     for (const blocker of next.blockers) {

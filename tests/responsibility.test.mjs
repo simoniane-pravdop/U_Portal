@@ -50,11 +50,12 @@ async function post(state, actor, edit, action = "Зміна картки") {
   return rules.POST(new Request("http://localhost/api/state", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ state: submitted, expectedRevision: state.revision, action, entityId: "task" }) }));
 }
 
-test("coordinator sees every private and archived card, but legacy card coordinator grants no access", () => {
+test("every active portal user can read private and archived cards without gaining work rights", () => {
   const state = fixture();
   state.nodes.push(makeNode("archive", { archived: true }), makeNode("other", { acceptorId: "other", assigneeId: "other" }));
   assert.deepEqual([...rules.visibleNodeIds(state, coordinator)], ["task", "archive", "other"]);
-  assert.deepEqual([...rules.visibleNodeIds(state, legacy)], []);
+  assert.deepEqual([...rules.visibleNodeIds(state, legacy)], ["task", "archive", "other"]);
+  assert.deepEqual([...rules.visibleNodeIds(state, { ...legacy, active: false })], []);
   assert.equal(rules.mayEdit(coordinator, initiator.id), false);
   assert.equal(rules.mayEdit(coordinator, coordinator.id), true);
   assert.equal(rules.workFilterForUser(state.nodes[0], initiator), "acceptance");
@@ -62,17 +63,35 @@ test("coordinator sees every private and archived card, but legacy card coordina
   assert.equal(rules.hasWorkAccessForUser(state.nodes[0], legacy), false);
 });
 
-test("server rejects coordinator writes, locks out self-assigned approvals and allows own notification reads", async () => {
+test("server rejects coordinator card and approval writes but allows communication and own notification reads", async () => {
   const state = fixture();
   for (const edit of [
     (next) => { next.nodes[0].title = "Changed"; },
     (next) => { next.nodes.push(makeNode("new", { acceptorId: coordinator.id })); },
-    (next) => { next.discussions.push({ id: "comment", nodeId: "task", authorId: coordinator.id, recipientId: coordinator.id, text: "x" }); },
     (next) => { next.decisions.push({ id: "decision", nodeId: "task", decisionOwnerId: coordinator.id, status: "requested" }); },
     (next) => { next.blockers.push({ id: "blocker", nodeId: "task", ownerId: coordinator.id, escalationToId: coordinator.id, status: "open", approvalStatus: "pending" }); },
   ]) assert.equal((await post(state, coordinator, edit)).status, 403);
+  assert.equal((await post(state, coordinator, (next) => { next.discussions.push({ id: "comment", nodeId: "task", authorId: coordinator.id, recipientId: initiator.id, kind: "comment", text: "x", createdAt: new Date().toISOString() }); })).status, 200);
   state.notifications.push({ id: "notice", userId: coordinator.id, nodeId: "task", readAt: "" });
   assert.equal((await post(state, coordinator, (next) => { next.notifications[0].readAt = "2026-09-15T12:00:00Z"; }, "Сповіщення прочитано")).status, 200);
+});
+
+test("a reader can comment or report an issue without changing status or creating a blocker", async () => {
+  const state = fixture();
+  const timestamp = new Date().toISOString();
+  assert.equal((await post(state, legacy, (next) => { next.discussions.push({ id: "c", nodeId: "task", authorId: legacy.id, text: "Уточнення", kind: "comment", createdAt: timestamp }); })).status, 200);
+  const issueResponse = await post(state, legacy, (next) => { next.discussions.push({ id: "i", nodeId: "task", authorId: legacy.id, recipientId: executor.id, text: "Немає доступу", kind: "issue", requiresResponse: true, createdAt: timestamp }); });
+  assert.equal(issueResponse.status, 200);
+  const saved = rules.savedState();
+  assert.equal(saved.nodes[0].health, "normal");
+  assert.equal(saved.blockers.length, 0);
+  assert.deepEqual(new Set(saved.notifications.map((item) => item.userId)), new Set([executor.id, initiator.id]));
+  assert.equal((await post(state, legacy, (next) => { next.nodes[0].health = "blocked"; })).status, 403);
+  assert.equal((await post(state, legacy, (next) => { next.blockers.push({ id: "b", nodeId: "task", ownerId: legacy.id, escalationToId: initiator.id, status: "open", approvalStatus: "pending" }); })).status, 403);
+  assert.equal((await post(state, legacy, (next) => { next.discussions.push({ id: "i", nodeId: "task", authorId: initiator.id, recipientId: executor.id, text: "spoof", kind: "issue", requiresResponse: true, createdAt: timestamp }); })).status, 403);
+  state.discussions.push({ id: "existing", nodeId: "task", authorId: executor.id, recipientId: legacy.id, text: "Первинне повідомлення", kind: "comment", createdAt: timestamp });
+  assert.equal((await post(state, legacy, (next) => { next.discussions[0].text = "Чужа редакція"; next.discussions[0].editedAt = timestamp; next.discussions[0].editedBy = legacy.id; })).status, 403);
+  assert.equal((await post(state, legacy, (next) => { next.discussions.push({ id: "forged", nodeId: "task", authorId: executor.id, text: "Підміна автора", kind: "comment", createdAt: timestamp }); })).status, 403);
 });
 
 test("only initiator or administrator approves blockers, decisions and completion", async () => {

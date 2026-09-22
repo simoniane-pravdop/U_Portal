@@ -10,6 +10,9 @@ const { d1, r2 } = hostingConfig;
 const cloudflareDatabaseId = process.env.CLOUDFLARE_D1_DATABASE_ID?.trim();
 const cloudflareR2BucketName = process.env.CLOUDFLARE_R2_BUCKET_NAME?.trim();
 const isCloudflareDeployment = Boolean(cloudflareDatabaseId);
+const deploymentVars: Record<string, string> = isCloudflareDeployment
+  ? { PORTAL_BASE_URL: "https://pravdop-management-portal.simonian-e-be8.workers.dev" }
+  : {};
 
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
@@ -17,7 +20,7 @@ const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 const localBindingConfig = {
   main: "./worker/index.ts",
   compatibility_flags: ["nodejs_compat"],
-  vars: isCloudflareDeployment ? { PORTAL_BASE_URL: "https://pravdop-management-portal.simonian-e-be8.workers.dev" } : {},
+  vars: deploymentVars,
   triggers: { crons: ["0 7 * * *"] },
   d1_databases: d1
     ? [

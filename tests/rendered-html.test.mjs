@@ -134,7 +134,7 @@ test("durable storage and integration bindings are declared", async () => {
   assert.match(stateRoute, /managesBlocker/);
   assert.match(stateRoute, /stateForUser/);
   assert.match(stateRoute, /mergeHiddenState/);
-  assert.match(stateRoute, /node\.visibility === "company"/);
+  assert.match(stateRoute, /user\.active \? state\.nodes\.map/);
   assert.ok(stateRoute.indexOf("body.expectedRevision !== current.revision") < stateRoute.indexOf("Журнал змін формується сервером"));
   assert.match(stateRoute, /administrator \? state\.audit/);
   assert.match(stateRoute, /audit: current\.audit/);
@@ -201,7 +201,7 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /tree-row-menu/);
   assert.match(source, /TreeWorkSnapshot/);
   assert.match(source, /Стан, звіти та взаємодія/);
-  assert.match(source, /Робоча картка · лише перегляд/);
+  assert.match(source, /Робоча картка · перегляд і коментарі/);
   assert.match(source, /Останні три звіти/);
   assert.match(source, /mobile-tree-switch/);
   assert.match(source, /compact-tree/);
@@ -331,10 +331,10 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /Періодичність, днів/);
   assert.match(source, /Автоматично з нижчих рівнів/);
   assert.match(source, /label="Статус"/);
-  assert.match(source, /visibility: "participants"/);
+  assert.match(source, /visibility: "company"/);
   assert.match(source, /node\.kind === "task" && <Field label="Статус"/);
   assert.match(source, /!\["acceptance", "completed"\]\.includes\(value\)/);
-  assert.match(source, /За замовчуванням картку бачать лише її учасники/);
+  assert.match(source, /Картку можуть читати всі активні користувачі порталу/);
   assert.match(source, /selected\?\.kind === "cycle"/);
   assert.doesNotMatch(source, /Одиниця координації — проект/);
   const hierarchy = await readFile(new URL("../app/lib/hierarchy.ts", import.meta.url), "utf8");

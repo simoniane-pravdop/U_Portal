@@ -206,7 +206,7 @@ export type DiscussionMessage = {
   nodeId: string;
   authorId: string;
   text: string;
-  kind: "comment" | "question" | "decision" | "approval" | "system";
+  kind: "comment" | "question" | "issue" | "decision" | "approval" | "system";
   createdAt: string;
   recipientId?: string;
   replyToId?: string;
