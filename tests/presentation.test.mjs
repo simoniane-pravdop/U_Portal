@@ -18,7 +18,9 @@ async function loadComponent(path, jsx = false) {
     },
   });
   const runtimeModule = { exports: {} };
-  new Function("require", "module", "exports", outputText)(require, runtimeModule, runtimeModule.exports);
+  const asanaLinks = jsx ? await loadComponent("../app/lib/asana-links.ts") : null;
+  const localRequire = (specifier) => specifier === "../lib/asana-links" ? asanaLinks : require(specifier);
+  new Function("require", "module", "exports", outputText)(localRequire, runtimeModule, runtimeModule.exports);
   return runtimeModule.exports;
 }
 
@@ -36,6 +38,20 @@ test("Asana links in filled card fields are clickable and safe", async () => {
   assert.match(html, />https:\/\/app\.asana\.com\/0\/123\/456<\/a>\./);
   assert.doesNotMatch(html, /href="javascript:/);
   assert.match(html, /&lt;script&gt;/);
+});
+
+test("Asana links display the task title when known, with an honest fallback", async () => {
+  const { asanaTaskGid, asanaLinkLabel } = await loadComponent("../app/lib/asana-links.ts");
+  const url = "https://app.asana.com/1/50916733923098/project/50916733923101/task/1215492457102253";
+  assert.equal(asanaTaskGid(url), "1215492457102253");
+  assert.equal(asanaTaskGid("https://evil-asana.com/task/1215492457102253"), null);
+  assert.equal(asanaLinkLabel(url, "Актуалізувати базу знань"), "Актуалізувати базу знань");
+  assert.match(asanaLinkLabel(url), /назву ще не отримано/);
+  const { LinkedText } = await loadComponent("../app/components/LinkedText.tsx", true);
+  const html = renderToStaticMarkup(createElement(LinkedText, { value: `Контрольне місце: ${url}`, asanaTitles: { [url]: "Актуалізувати базу знань" } }));
+  assert.match(html, /href="https:\/\/app\.asana\.com\/1\/50916733923098\/project\/50916733923101\/task\/1215492457102253"/);
+  assert.match(html, />Актуалізувати базу знань<\/a>/);
+  assert.doesNotMatch(html, />https:\/\/app\.asana\.com/);
 });
 
 test("tree passport opens filled fields before the work snapshot", async () => {
@@ -57,6 +73,18 @@ test("saved Asana links remain available independently of account connection", a
   assert.ok(source.indexOf("{savedAsanaLinks.length > 0 && <div className=\"asana-saved-links\">") < source.indexOf("{!asanaStatus?.connected ? <div className=\"asana-empty\">"));
   assert.match(source, /savedAsanaLinks = asanaLinks\(selected\.controlPlace, selected\.description\)/);
   assert.match(source, /savedAsanaLinks = asanaLinks\(node\.controlPlace, node\.description, node\.asana\.taskUrl\)/);
+});
+
+test("Asana task names are read from a shared title cache without borrowing another user's connection", async () => {
+  const route = await readFile(new URL("../app/api/asana/titles/route.ts", import.meta.url), "utf8");
+  const source = await readFile(new URL("../app/PortalApp.tsx", import.meta.url), "utf8");
+  assert.match(route, /SELECT task_gid, name, updated_at FROM asana_task_titles/);
+  assert.match(route, /SELECT user_id FROM asana_connections WHERE user_id = \?/);
+  assert.match(route, /asanaRequest\(user\.id,/);
+  assert.match(source, /const titles = useAsanaTitles\(selected\)/);
+  assert.match(source, /asanaLinkLabel\(url, titles\[url\]\)/);
+  assert.match(source, /aria-expanded=\{hasChildren \? expanded\.has\(node\.id\) : undefined\}/);
+  assert.match(source, /aria-expanded=\{hasChildren \? opened : undefined\}/);
 });
 
 test("portal navigation exposes actual links and coordination opens cards in a new tab", async () => {

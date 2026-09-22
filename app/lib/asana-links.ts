@@ -16,3 +16,26 @@ export function asanaLinks(...values: string[]): string[] {
   }
   return [...links];
 }
+
+export function asanaTaskGid(value: string): string | null {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || !["app.asana.com", "asana.com", "www.asana.com"].includes(url.hostname)) return null;
+    const parts = url.pathname.split("/").filter(Boolean);
+    const taskIndex = parts.indexOf("task");
+    if (taskIndex >= 0) return /^\d{8,}$/.test(parts[taskIndex + 1] || "") ? parts[taskIndex + 1] : null;
+    if (parts[0] === "0") {
+      const candidate = parts[2];
+      return /^\d{8,}$/.test(candidate || "") ? candidate : null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function asanaLinkLabel(url: string, title?: string): string {
+  if (title?.trim()) return title.trim();
+  const gid = asanaTaskGid(url);
+  return gid ? `Задача Asana #${gid} · назву ще не отримано` : url;
+}

@@ -48,6 +48,12 @@ export const asanaConnections = sqliteTable("asana_connections", {
   updatedAt: text("updated_at").notNull(),
 });
 
+export const asanaTaskTitles = sqliteTable("asana_task_titles", {
+  taskGid: text("task_gid").primaryKey(),
+  name: text("name").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
 export const syncEvents = sqliteTable("sync_events", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull(),

@@ -1284,6 +1284,12 @@ small { font-size: 11px !important; line-height: 1.35; }
 .tree-row.kind-task { color: var(--navy-950); background: var(--uo-task); }
 .tree-row.kind-goal .tree-name, .tree-row.kind-goal .tree-toggle, .tree-row.kind-goal .tree-row-menu summary { color: #fff; }
 .tree-row .tree-code { min-height: 28px; display: grid; place-items: center; padding: 3px 6px; border-radius: 6px; color: #fff; background: var(--navy-800); }
+.tree-row .tree-toggle.has-children { width: 29px; height: 29px; border: 1px solid #4f7496; border-radius: 7px; color: #fff; background: var(--navy-800); font-size: 22px; font-weight: 900; line-height: 1; cursor: pointer; }
+.tree-row .tree-toggle.has-children:hover { color: #fff; background: #315b83; }
+.tree-row .tree-toggle.is-leaf { width: 29px; height: 29px; cursor: default; }
+.tree-row.kind-goal .tree-toggle.has-children { border-color: rgba(255,255,255,.7); color: var(--navy-900); background: #fff; }
+.tree-row.selected .tree-toggle.has-children { border-color: #fff; color: var(--navy-900); background: #fff; }
+.compact-tree .tree-row .tree-toggle.has-children { width: 29px; height: 29px; }
 .tree-row.kind-goal .tree-code { background: rgba(255,255,255,.17); }
 .tree-row.selected { box-shadow: inset 0 0 0 3px #edc45f; }
 .tree-row.kind-cycle:hover, .tree-row.kind-subcycle:hover, .tree-row.kind-task:hover { filter: brightness(.96); }
@@ -1345,6 +1351,10 @@ small { font-size: 11px !important; line-height: 1.35; }
 .coordination-tree-branch.level-goal > .coordination-tree-row .coordination-progress,
 .coordination-tree-branch.level-goal > .coordination-tree-row > time { color: #fff; }
 .coordination-tree-branch.level-goal > .coordination-tree-row .coordination-expand { color: #fff; }
+.coordination-expand.has-children { width: 32px; height: 32px; border: 1px solid #4f7496; border-radius: 7px; color: #fff; background: var(--navy-800); font-size: 23px; font-weight: 900; line-height: 1; cursor: pointer; }
+.coordination-expand.has-children:hover { color: #fff; background: #315b83; }
+.coordination-tree-branch.level-goal > .coordination-tree-row .coordination-expand.has-children { border-color: rgba(255,255,255,.7); color: var(--navy-900); background: #fff; }
+.coordination-expand.is-leaf { width: 32px; height: 32px; }
 .coordination-tree-head { font-size: 11px; }
 .coordination-object { grid-template-columns: 62px minmax(0, 1fr); gap: 3px 8px; }
 .coordination-object span { min-height: 30px; display: grid; place-items: center; padding: 4px 7px; border-radius: 6px; color: #fff; background: var(--navy-800); font-size: 12px; }
@@ -1475,6 +1485,8 @@ body { font-size: 14px; }
 .tree-snapshot-summary article > time, .tree-snapshot-summary article > small { color: var(--muted); font-size: 11px; }
 .tree-snapshot-summary article > p { margin: 5px 0; color: #405166; font-size: 12px; line-height: 1.45; }
 .tree-snapshot-summary article > a { display: inline-flex; margin-top: 8px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; color: var(--navy-800); background: #fff; font-size: 11px; font-weight: 850; }
+.tree-snapshot-summary article > strong a, .asana-linked-card .asana-task-title { color: #145892; font: inherit; font-weight: 800; text-decoration: underline; overflow-wrap: anywhere; }
+.asana-linked-card .asana-task-title { border: 0; padding: 0; background: transparent; }
 .snapshot-section-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .snapshot-section-head b { min-width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; color: var(--navy-800); background: #e9f0f7; font-size: 11px; }
 .tree-snapshot-streams article { margin-top: 7px; padding: 9px; border-left: 3px solid var(--line); border-radius: 0 7px 7px 0; background: #f8fafc; }

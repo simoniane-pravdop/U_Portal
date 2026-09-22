@@ -110,6 +110,11 @@ const schemaStatements = [
     scope TEXT NOT NULL,
     updated_at TEXT NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS asana_task_titles (
+    task_gid TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`,
   `CREATE TABLE IF NOT EXISTS sync_events (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,

@@ -1,9 +1,11 @@
 import { Fragment } from "react";
+import { asanaLinkLabel, asanaTaskGid } from "../lib/asana-links";
+import type { AsanaTitles } from "../lib/use-asana-titles";
 
 const urlPattern = /https?:\/\/[^\s<>"']+/gi;
 const trailingPunctuation = /[.,;:!?)}\]]+$/;
 
-export function LinkedText({ value }: { value: string }) {
+export function LinkedText({ value, asanaTitles = {} }: { value: string; asanaTitles?: AsanaTitles }) {
   const parts: React.ReactNode[] = [];
   let cursor = 0;
   for (const match of value.matchAll(urlPattern)) {
@@ -17,7 +19,7 @@ export function LinkedText({ value }: { value: string }) {
       const url = new URL(href);
       if (url.protocol === "https:" || url.protocol === "http:") safeUrl = url.href;
     } catch { /* A malformed URL remains plain text. */ }
-    parts.push(safeUrl ? <a key={start} href={safeUrl} target="_blank" rel="noopener noreferrer">{href}</a> : href);
+    parts.push(safeUrl ? <a key={start} href={safeUrl} target="_blank" rel="noopener noreferrer">{asanaTaskGid(safeUrl) ? asanaLinkLabel(safeUrl, asanaTitles[safeUrl]) : href}</a> : href);
     if (suffix) parts.push(suffix);
     cursor = start + raw.length;
   }
