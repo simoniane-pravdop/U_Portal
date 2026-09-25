@@ -115,6 +115,22 @@ const schemaStatements = [
     name TEXT NOT NULL,
     updated_at TEXT NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS asana_outbox (
+    event_id TEXT PRIMARY KEY,
+    node_id TEXT NOT NULL,
+    task_gid TEXT NOT NULL,
+    author_id TEXT NOT NULL,
+    recipient_id TEXT NOT NULL DEFAULT '',
+    kind TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    story_gid TEXT NOT NULL DEFAULT '',
+    last_error TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    sent_at TEXT NOT NULL DEFAULT ''
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_asana_outbox_author_status
+    ON asana_outbox(author_id, status, created_at)`,
   `CREATE TABLE IF NOT EXISTS sync_events (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,

@@ -44,6 +44,8 @@ export type WorkUpdate = {
   createdAt: string;
   createdBy: string;
   source: "portal" | "asana";
+  asanaStoryGid?: string;
+  externalAuthorName?: string;
 };
 
 export type AsanaLink = {
@@ -210,9 +212,12 @@ export type DiscussionMessage = {
   text: string;
   kind: "comment" | "question" | "issue" | "decision" | "approval" | "system";
   createdAt: string;
+  asanaStoryGid?: string;
+  asanaOriginated?: boolean;
+  externalAuthorName?: string;
   recipientId?: string;
   replyToId?: string;
-  relatedType?: "decision" | "acceptance";
+  relatedType?: "blocker" | "decision" | "acceptance";
   relatedId?: string;
   requiresResponse?: boolean;
   editedAt?: string;

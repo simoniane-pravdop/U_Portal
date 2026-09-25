@@ -602,6 +602,12 @@ tbody tr:hover { background: #f8fafc; }
 .asana-linked-card > div:last-child { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
 .asana-linked-card a, .asana-linked-card button { padding: 7px 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--navy-800); background: #fff; font-size: 8px; font-weight: 800; }
 .asana-linked-card button.danger { color: var(--red); border-color: #e9bdc0; }
+.asana-name-suggestion, .asana-delivery-notice { display: grid; gap: 7px; margin: 10px 14px; padding: 12px; border: 1px solid #d8b96b; border-radius: 8px; color: var(--navy-900); background: #fff9eb; font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+.asana-delivery-notice { border-color: #bdd1e5; background: #f4f8fc; }
+.asana-name-suggestion strong, .asana-delivery-notice strong { font-size: 13px; }
+.asana-name-suggestion p, .asana-delivery-notice p { margin: 0; }
+.asana-name-suggestion button, .asana-delivery-notice button { justify-self: start; max-width: 100%; padding: 8px 10px; border: 1px solid #9db5cf; border-radius: 7px; color: var(--navy-900); background: #fff; font-size: 11px; font-weight: 800; white-space: normal; text-align: left; }
+.asana-delivery-notice a { color: #145892; font-weight: 800; text-decoration: underline; }
 .update-panel { max-height: 440px; overflow: auto; }
 .aggregate-work { display: grid; grid-template-columns: minmax(260px, .65fr) minmax(0, 1.35fr); gap: 12px; padding: 18px 22px 25px; }
 .aggregate-note { border-color: #c7d7e6; background: #f2f7fb; }

@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     redirect_uri: `${baseUrl(request)}/api/asana/callback`,
     response_type: "code",
     state: stateToken,
-    scope: "tasks:read tasks:write projects:read users:read",
+    scope: "tasks:read tasks:write projects:read users:read stories:read stories:write tags:read tags:write",
   });
   return new Response(null, {
     status: 302,

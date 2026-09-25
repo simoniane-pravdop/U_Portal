@@ -2,6 +2,7 @@ import { baseUrl, currentUser, database, jsonError, loadState, mayEdit, runtimeE
 import { notifyTelegramUsers } from "../../lib/telegram";
 import { approvalChangeError, isDerivedHierarchyChange, routePendingRequests } from "../../lib/responsibility";
 import { nodeAuditChanges } from "../../lib/node-audit";
+import { flushAsanaOutbox } from "../../lib/asana-outbox";
 import type { PortalNotification, PortalState, SessionUser } from "../../types";
 
 export const dynamic = "force-dynamic";
@@ -283,6 +284,7 @@ export async function POST(request: Request) {
     ...(Array.isArray(next.audit) ? next.audit : []),
   ].slice(0, 2000);
 
+  let queuedAsanaEvents = 0;
   if (db) {
     const now = new Date().toISOString();
     const stateStatement = db.prepare(
@@ -294,9 +296,29 @@ export async function POST(request: Request) {
       return db.prepare("INSERT INTO portal_entity_versions (id, entity_id, revision, user_id, user_name, action, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
         .bind(crypto.randomUUID(), id, next.revision, user.id, user.name, body.action || "Оновлено дані порталу", JSON.stringify(snapshot || null), now);
     });
-    const results = await db.batch([stateStatement, ...versions]);
+    const outbound = [];
+    for (const message of next.discussions || []) {
+      if (message.authorId !== user.id || message.asanaStoryGid || message.asanaOriginated || message.deletedAt || current.discussions.some((before) => before.id === message.id)) continue;
+      const node = next.nodes.find((item) => item.id === message.nodeId);
+      if (!node?.asana?.taskGid) continue;
+      outbound.push(db.prepare("INSERT OR IGNORE INTO asana_outbox (event_id, node_id, task_gid, author_id, recipient_id, kind, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+        .bind(message.id, node.id, node.asana.taskGid, user.id, message.recipientId || "", "message", JSON.stringify(message), message.createdAt));
+    }
+    for (const node of next.nodes) {
+      if (!node.asana?.taskGid) continue;
+      const oldIds = new Set(current.nodes.find((item) => item.id === node.id)?.updates?.map((report) => report.id) || []);
+      for (const report of node.updates || []) {
+        if (oldIds.has(report.id) || report.source !== "portal" || report.createdBy !== user.id) continue;
+        outbound.push(db.prepare("INSERT OR IGNORE INTO asana_outbox (event_id, node_id, task_gid, author_id, recipient_id, kind, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+          .bind(report.id, node.id, node.asana.taskGid, user.id, "", "report", JSON.stringify(report), report.createdAt));
+      }
+    }
+    queuedAsanaEvents = outbound.length;
+    const results = await db.batch([stateStatement, ...versions, ...outbound]);
     if (!results[0].meta.changes) return jsonError("Конфлікт одночасного редагування", 409);
   }
+
+  const asanaDelivery = db && queuedAsanaEvents ? await flushAsanaOutbox(request, user.id, body.entityId).catch((error) => ({ sent: 0, pending: queuedAsanaEvents, errors: [error instanceof Error ? error.message : "Помилка Asana"] })) : null;
 
   if (next.settings.telegramPlanned) {
     const entityId = body.entityId || changedNodeIds[0] || [...affectedNodeIds][0];
@@ -324,5 +346,5 @@ export async function POST(request: Request) {
     }
   }
 
-  return Response.json({ ...stateForUser(next, user), currentUser: user, storage, authConfigured: Boolean(runtimeEnv().PORTAL_OWNER_CREDENTIAL || runtimeEnv().GOOGLE_CLIENT_ID) });
+  return Response.json({ ...stateForUser(next, user), currentUser: user, storage, asanaDelivery, authConfigured: Boolean(runtimeEnv().PORTAL_OWNER_CREDENTIAL || runtimeEnv().GOOGLE_CLIENT_ID) });
 }
