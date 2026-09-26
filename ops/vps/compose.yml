@@ -1,0 +1,35 @@
+name: u-portal-copy
+services:
+  portal:
+    image: u-portal-copy:${PORTAL_IMAGE_TAG:?Specify immutable release tag}
+    build:
+      context: ../..
+      dockerfile: ops/vps/Dockerfile
+    restart: unless-stopped
+    init: true
+    env_file:
+      - /opt/u-portal/shared/portal.env
+    ports:
+      - "127.0.0.1:3101:3000"
+    volumes:
+      - /opt/u-portal/shared/data:/data
+    mem_limit: 768m
+    cpus: 1.0
+    pids_limit: 128
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/state').then(r=>process.exit(r.status===401?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s

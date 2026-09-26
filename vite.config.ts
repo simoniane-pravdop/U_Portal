@@ -2,6 +2,7 @@ import vinext from "vinext";
 import { defineConfig } from "vite";
 import hostingConfig from "./.openai/hosting.json";
 import { sites } from "./build/sites-vite-plugin";
+import { resolve } from "node:path";
 
 const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
   "00000000-0000-4000-8000-000000000000";
@@ -46,6 +47,13 @@ const localBindingConfig = {
 };
 
 export default defineConfig(async () => {
+  // A separate Node build keeps the production Worker and its D1 untouched.
+  if (process.env.PORTAL_RUNTIME === "node") {
+    return {
+      resolve: { alias: { "cloudflare:workers": resolve("runtime/node-env.ts") } },
+      plugins: [vinext()],
+    };
+  }
   // Keep Wrangler and Miniflare state project-local. These are non-secret tool
   // settings; application environment belongs in ignored `.env*` files.
   process.env.WRANGLER_WRITE_LOGS ??= "false";
