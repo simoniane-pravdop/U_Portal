@@ -1,4 +1,5 @@
 import { encryptSecret } from "../../../lib/crypto";
+import { portalHref } from "../../../lib/portal-routes";
 import { baseUrl, currentUser, database, jsonError, loadState, parseCookies, runtimeEnv } from "../../../lib/server";
 
 export async function GET(request: Request) {
@@ -63,5 +64,5 @@ export async function GET(request: Request) {
       new Date().toISOString(),
     )
     .run();
-  return new Response(null, { status: 302, headers: { Location: `${baseUrl(request)}/?view=settings&asana=connected` } });
+  return new Response(null, { status: 302, headers: { Location: `${baseUrl(request)}${portalHref("settings")}?asana=connected` } });
 }

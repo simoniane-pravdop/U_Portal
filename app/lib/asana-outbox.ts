@@ -1,6 +1,7 @@
 import { asanaRequest } from "./asana";
 import { portalMessageForAsana, portalOriginId, portalReportForAsana } from "./asana-integration";
 import { baseUrl, database, loadState } from "./server";
+import { portalHref } from "./portal-routes";
 import type { DiscussionMessage, WorkUpdate } from "../types";
 
 type OutboxRow = { event_id: string; node_id: string; task_gid: string; author_id: string; recipient_id: string; kind: string; payload: string };
@@ -50,7 +51,7 @@ export async function flushAsanaOutbox(request: Request, authorId: string, nodeI
         const author = state.users.find((item) => item.id === row.author_id);
         const payload = JSON.parse(row.payload) as WorkUpdate & DiscussionMessage;
         const focus = row.kind === "report" ? "reports" : payload.relatedType === "blocker" ? "blocker" : payload.relatedType === "decision" ? "decision" : payload.relatedType === "acceptance" ? "acceptance" : "discussion";
-        const actionUrl = `${baseUrl(request)}/?view=my&node=${encodeURIComponent(node.id)}&focus=${focus}`;
+        const actionUrl = `${baseUrl(request)}${portalHref("my", node.id, focus)}`;
         let htmlText: string;
         if (row.kind === "report") {
           htmlText = portalReportForAsana(payload, author?.name || "Учасник порталу", actionUrl);

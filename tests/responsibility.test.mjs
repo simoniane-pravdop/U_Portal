@@ -17,6 +17,7 @@ const source = [
   noImports(await read("app/lib/hierarchy.ts")),
   noImports(await read("app/lib/responsibility.ts")),
   noImports(await read("app/lib/node-audit.ts")),
+  noImports(await read("app/lib/portal-routes.ts")),
   declarations(server, ["mayEdit", "jsonError"]),
   declarations(ui, ["workFilterForUser", "hasWorkAccessForUser"]),
   noImports(await read("app/api/state/route.ts")),

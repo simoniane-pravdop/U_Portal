@@ -1,5 +1,6 @@
 "use client";
 /* eslint-disable @next/next/no-img-element -- the bundled 145×48 brand asset is already optimized and vinext-compatible */
+/* eslint-disable @next/next/no-html-link-for-pages -- native anchors support new tabs in this stateful shell and full-document OAuth API redirects; dynamic section routes make the rule misclassify API links */
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { recalculateHierarchy } from "./lib/hierarchy";
@@ -17,6 +18,7 @@ type TrashAction = (node: WorkNode, action: "delete" | "restore") => Promise<boo
 import { LinkedText } from "./components/LinkedText";
 import { CardActionsMenu } from "./components/CardActionsMenu";
 import { IdeasView } from "./components/IdeasView";
+import { canonicalPortalUrl, portalHref, readPortalRoute, type PortalView, type PortalFocus } from "./lib/portal-routes";
 import { missingActiveTasksReason } from "./coordination-rules";
 import type {
   Acceptance,
@@ -40,10 +42,10 @@ import type {
   WorkNode,
 } from "./types";
 
-type View = "dashboard" | "inbox" | "calendar" | "tree" | "my" | "coordination" | "ideas" | "settings";
+type View = PortalView;
 type Modal = "node" | "blocker" | "decision" | "coordination" | "dependency" | "evidence" | null;
 type WorkFilter = "action" | "acceptance" | "all";
-type WorkFocus = "blocker" | "decision" | "acceptance" | "discussion" | "reports" | null;
+type WorkFocus = PortalFocus;
 type CoordinationStateFilter = LifecycleStatus | "active" | "risk" | "no_report_5d";
 type NoticeTone = "success" | "error";
 type Notify = (value: string, tone?: NoticeTone) => void;
@@ -94,11 +96,6 @@ function workFilterForUser(node: WorkNode | undefined, user: PortalUser): WorkFi
 }
 function hasWorkAccessForUser(node: WorkNode, user: PortalUser) {
   return node.assigneeId === user.id || node.acceptorId === user.id || node.participantIds.includes(user.id);
-}
-function portalHref(view: View, nodeId?: string) {
-  const params = new URLSearchParams({ view });
-  if (nodeId) params.set("node", nodeId);
-  return `/?${params.toString()}`;
 }
 function ordinaryLinkClick(event: React.MouseEvent<HTMLAnchorElement>) {
   return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
@@ -555,20 +552,22 @@ export function PortalApp() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load()
       .then((data) => {
-        const requestedView = new URLSearchParams(window.location.search).get("view") as View | null;
-        if (requestedView && nav.some((item) => item.id === requestedView)) setView(requestedView);
-        const requestedNode = new URLSearchParams(window.location.search).get("node");
+        const route = readPortalRoute(new URL(window.location.href));
+        const requestedView = route.view;
+        const requestedNode = route.nodeId;
+        let resolvedView = requestedView;
         const requestedWorkNode = requestedNode ? data.nodes.find((node) => node.id === requestedNode && !node.archived) : undefined;
         if (requestedWorkNode) {
           setSelectedId(requestedWorkNode.id);
           if (requestedView === "my") {
             if (hasWorkAccessForUser(requestedWorkNode, data.currentUser)) setWorkEntryFilter(workFilterForUser(requestedWorkNode, data.currentUser));
-            else setView("tree");
-            const requestedFocus = new URLSearchParams(window.location.search).get("focus");
-            if (["blocker", "decision", "acceptance", "discussion", "reports"].includes(requestedFocus || "")) setWorkEntryFocus(requestedFocus as WorkFocus);
+            else resolvedView = "tree";
+            setWorkEntryFocus(route.focus);
           }
         }
-        window.requestAnimationFrame(() => { urlSyncReadyRef.current = true; });
+        setView(resolvedView);
+        window.history.replaceState({ view: resolvedView, node: requestedWorkNode?.id || "" }, "", canonicalPortalUrl(new URL(window.location.href), resolvedView, requestedWorkNode?.id, route.focus));
+        urlSyncReadyRef.current = true;
       })
       .catch((error) => setLoadError(error.message));
   }, [load]);
@@ -579,21 +578,21 @@ export function PortalApp() {
 
   useEffect(() => {
     if (!payload || !urlSyncReadyRef.current) return;
-    const url = new URL(window.location.href);
-    url.searchParams.set("view", view);
-    if (selectedId && payload.nodes.some((node) => node.id === selectedId && !node.archived)) url.searchParams.set("node", selectedId);
-    else url.searchParams.delete("node");
-    if (`${url.pathname}${url.search}` !== `${window.location.pathname}${window.location.search}`) window.history.pushState({ view, node: selectedId }, "", `${url.pathname}${url.search}`);
-  }, [payload, selectedId, view]);
+    const nodeId = payload.nodes.some((node) => node.id === selectedId && !node.archived) ? selectedId : undefined;
+    const href = canonicalPortalUrl(new URL(window.location.href), view, nodeId, workEntryFocus);
+    if (href !== `${window.location.pathname}${window.location.search}${window.location.hash}`) window.history.pushState({ view, node: selectedId }, "", href);
+  }, [payload, selectedId, view, workEntryFocus]);
 
   useEffect(() => {
     const handlePopState = () => {
-      const params = new URLSearchParams(window.location.search);
-      const requestedView = params.get("view") as View | null;
-      if (requestedView && nav.some((item) => item.id === requestedView)) setView(requestedView);
-      const requestedNode = params.get("node");
-      if (requestedNode && payloadRef.current?.nodes.some((node) => node.id === requestedNode && !node.archived)) setSelectedId(requestedNode);
-      else setSelectedId("");
+      const route = readPortalRoute(new URL(window.location.href));
+      const data = payloadRef.current;
+      const node = data?.nodes.find((item) => item.id === route.nodeId && !item.archived);
+      const resolvedView = route.view === "my" && node && data && !hasWorkAccessForUser(node, data.currentUser) ? "tree" : route.view;
+      setView(resolvedView);
+      setSelectedId(node?.id || "");
+      setWorkEntryFocus(resolvedView === "my" ? route.focus : null);
+      if (node && data && resolvedView === "my") setWorkEntryFilter(workFilterForUser(node, data.currentUser));
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
@@ -790,9 +789,7 @@ export function PortalApp() {
     setWorkEntryFilter(workFilterForUser(node, payload.currentUser)); setWorkEntryFocus(focus); setView("my");
   };
   const copyNodeLink = async (node: WorkNode, targetView: View) => {
-    const url = new URL(window.location.origin);
-    url.searchParams.set("view", targetView);
-    url.searchParams.set("node", node.id);
+    const url = new URL(portalHref(targetView, node.id), window.location.origin);
     try {
       await navigator.clipboard.writeText(url.toString());
       setNotice(`Посилання на ${node.code} скопійовано`);
@@ -1834,7 +1831,7 @@ function AsanaSyncPanel({ payload, selected, asanaStatus, mutate, setNotice, com
       const result = (await response.json()) as { error?: string; warning?: string };
       if (!response.ok) throw new Error(result.error || "Не вдалося відключити Asana-акаунт");
       setNotice(result.warning || "Asana-акаунт відключено");
-      window.setTimeout(() => window.location.assign("/?view=settings&asana=disconnected"), 600);
+      window.setTimeout(() => window.location.assign(`${portalHref("settings")}?asana=disconnected`), 600);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Не вдалося відключити Asana-акаунт", "error");
       setBusy(false);
@@ -1902,7 +1899,7 @@ function AsanaAccountPanel({ payload, status, notify }: { payload: PortalPayload
       const result = (await response.json()) as { error?: string; warning?: string };
       if (!response.ok) throw new Error(result.error || "Не вдалося відключити Asana-акаунт");
       notify(result.warning || "Asana-акаунт відключено");
-      window.setTimeout(() => window.location.assign("/?view=settings&asana=disconnected"), 600);
+      window.setTimeout(() => window.location.assign(`${portalHref("settings")}?asana=disconnected`), 600);
     } catch (cause) { notify(cause instanceof Error ? cause.message : "Не вдалося відключити Asana-акаунт", "error"); setBusy(false); }
   };
   return <section className="panel integration-main"><div className="integration-brand"><div className="asana-logo">A</div><div><span>Asana</span><h2>{status?.connected ? "Особистий акаунт підключено" : "Підключення очікується"}</h2><p>{status?.configured ? "Тут керується лише особистий акаунт. Конкретні задачі прив’язуються в «Моїй роботі»." : "Потрібні ключі Asana OAuth-застосунку для цього середовища."}</p></div><span className={`connection-state ${status?.connected ? "connected" : ""}`}>{status?.connected ? "Підключено" : "Не підключено"}</span></div>{status?.connected ? <div className="connected-user"><div><strong>{String(status.connection?.asana_user_name || payload.currentUser.name)}</strong><small>Зміни в Asana виконуватимуться від цього користувача.</small></div><div className="asana-account-actions"><a href="/api/asana/start">Перепідключити акаунт</a><button className="danger" disabled={busy} onClick={() => void disconnect()}>{busy ? "Відключаємо…" : "Відключити акаунт"}</button></div></div> : <a className={`button-link ${!status?.configured ? "disabled" : ""}`} href={status?.configured ? "/api/asana/start" : undefined}>Підключити мій Asana-акаунт</a>}</section>;

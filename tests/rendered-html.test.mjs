@@ -49,12 +49,12 @@ test("coordination flags open cycles and subcycles without active descendant tas
   assert.deepEqual(reasons(node("task", "task"), []), []);
 });
 
-async function render() {
+async function render(path = "/") {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
   const { default: worker } = await import(workerUrl.href);
   return worker.fetch(
-    new Request("http://localhost/", { headers: { accept: "text/html" } }),
+    new Request(`http://localhost${path}`, { headers: { accept: "text/html" } }),
     { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
     { waitUntil() {}, passThroughOnException() {} },
   );
@@ -71,6 +71,15 @@ test("server-renders the management portal shell", async () => {
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
   const logo = await readFile(new URL("../public/pravdop-logo.png", import.meta.url));
   assert.ok(logo.length > 100);
+});
+
+test("direct section paths server-render after refresh and unknown sections return 404", async () => {
+  for (const path of ["/dashbord", "/vkhidni", "/kalendar", "/derevo-tsilei?node=1", "/moia-robota?node=1&focus=reports", "/koordynatsiia", "/idei", "/nalashtuvannia?asana=connected"]) {
+    const response = await render(path);
+    assert.equal(response.status, 200, path);
+    assert.match(await response.text(), /Управлінський портал/);
+  }
+  assert.equal((await render("/not-a-section")).status, 404);
 });
 
 test("initial state has the two authorized administrators and no test management data", async () => {

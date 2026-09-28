@@ -1,5 +1,6 @@
 import { baseUrl, database, loadState, runtimeEnv } from "../../../lib/server";
 import { sendTelegramMessage, telegramConfigured } from "../../../lib/telegram";
+import { portalHref } from "../../../lib/portal-routes";
 
 function dateInZone(date: Date, timezone: string) {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
@@ -27,7 +28,7 @@ export async function POST(request: Request) {
     if (duplicate) continue;
     const deadline = node.plannedEnd < today ? `прострочено з ${node.plannedEnd}` : node.plannedEnd === today ? "строк сьогодні" : "строк завтра";
     try {
-      await sendTelegramMessage(link.chat_id, `Нагадування про строк\n\n${node.code} · ${node.title}\n${deadline} · прогрес ${node.progress}%\n\n${baseUrl(request)}/?view=my`);
+      await sendTelegramMessage(link.chat_id, `Нагадування про строк\n\n${node.code} · ${node.title}\n${deadline} · прогрес ${node.progress}%\n\n${baseUrl(request)}${portalHref("my", node.id)}`);
       await db.prepare("INSERT INTO telegram_events (id, user_id, direction, status, summary, created_at) VALUES (?, ?, ?, ?, ?, ?)").bind(crypto.randomUUID(), node.assigneeId, "portal_to_telegram", "success", key, new Date().toISOString()).run();
       sent += 1;
     } catch (cause) {

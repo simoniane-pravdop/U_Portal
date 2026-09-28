@@ -4,6 +4,7 @@ import { approvalChangeError, isDerivedHierarchyChange, routePendingRequests } f
 import { nodeAuditChanges } from "../../lib/node-audit";
 import { flushAsanaOutbox } from "../../lib/asana-outbox";
 import { trashFields } from "../../lib/trash";
+import { portalHref } from "../../lib/portal-routes";
 import type { PortalNotification, PortalState, SessionUser } from "../../types";
 
 export const dynamic = "force-dynamic";
@@ -354,7 +355,7 @@ export async function POST(request: Request) {
               : [];
       if (recipients.length) {
         const detail = createdBlocker ? `\nБлокер: ${createdBlocker.title}` : createdDecision ? `\nПотрібне рішення: ${createdDecision.question}` : becameUnhealthy ? `\nСтан: ${node.health === "blocked" ? "заблоковано" : "є ризик"}` : "";
-        await notifyTelegramUsers(recipients.filter((id) => id !== user.id), `${body.action || "Оновлено дані"}\n\n${node.code} · ${node.title}${detail}\n\n${baseUrl(request)}/?view=my`);
+        await notifyTelegramUsers(recipients.filter((id) => id !== user.id), `${body.action || "Оновлено дані"}\n\n${node.code} · ${node.title}${detail}\n\n${baseUrl(request)}${portalHref("my", node.id)}`);
       }
     }
   }
