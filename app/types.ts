@@ -23,6 +23,16 @@ export type PortalUser = {
   color: string;
 };
 
+export type PortalIdea = {
+  id: string;
+  title: string;
+  description: string;
+  createdById: string;
+  createdAt: string;
+  updatedAt: string;
+  version: number;
+};
+
 export type Evidence = {
   id: string;
   kind: "link" | "note" | "file";

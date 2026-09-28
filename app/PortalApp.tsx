@@ -16,6 +16,7 @@ import { branchNodes, mayManageTrash } from "./lib/trash";
 type TrashAction = (node: WorkNode, action: "delete" | "restore") => Promise<boolean>;
 import { LinkedText } from "./components/LinkedText";
 import { CardActionsMenu } from "./components/CardActionsMenu";
+import { IdeasView } from "./components/IdeasView";
 import { missingActiveTasksReason } from "./coordination-rules";
 import type {
   Acceptance,
@@ -39,7 +40,7 @@ import type {
   WorkNode,
 } from "./types";
 
-type View = "dashboard" | "inbox" | "calendar" | "tree" | "my" | "coordination" | "settings";
+type View = "dashboard" | "inbox" | "calendar" | "tree" | "my" | "coordination" | "ideas" | "settings";
 type Modal = "node" | "blocker" | "decision" | "coordination" | "dependency" | "evidence" | null;
 type WorkFilter = "action" | "acceptance" | "all";
 type WorkFocus = "blocker" | "decision" | "acceptance" | "discussion" | "reports" | null;
@@ -112,6 +113,7 @@ const nav: Array<{ id: View; label: string; hint: string; icon: string }> = [
   { id: "tree", label: "Дерево цілей", hint: "Напрями зусиль та завдання", icon: "⌘" },
   { id: "my", label: "Моя робота", hint: "Виконання й звіти", icon: "☑" },
   { id: "coordination", label: "Координація", hint: "Зведення за напрямами зусиль", icon: "↔" },
+  { id: "ideas", label: "Ідеї", hint: "Задуми й майбутні дії", icon: "✦" },
   { id: "settings", label: "Налаштування", hint: "Бібліотеки й інтеграції", icon: "⚙" },
 ];
 
@@ -999,7 +1001,7 @@ export function PortalApp() {
               <span className="nav-mark" aria-hidden="true">{item.icon}</span><span><strong>{item.label}{item.id === "inbox" && unreadNotificationCount > 0 && <b className="nav-unread">{unreadNotificationCount}</b>}</strong><small>{item.hint}</small></span>
             </a>
           ))}
-          <details className="mobile-more-nav"><summary><span aria-hidden="true">•••</span><strong>Ще</strong></summary><div>{nav.filter((item) => ["calendar", "coordination", "settings"].includes(item.id)).map((item) => <a key={item.id} href={portalHref(item.id)} onClick={(event) => { if (!ordinaryLinkClick(event)) return; event.preventDefault(); event.currentTarget.closest("details")?.removeAttribute("open"); setView(item.id); }}><span aria-hidden="true">{item.icon}</span><strong>{item.label}</strong></a>)}<div className="mobile-account"><UserAvatar user={payload.currentUser} compact /><span><strong>{payload.currentUser.name}</strong><small>{roleLabels[payload.currentUser.role]}</small></span><button type="button" onClick={() => void logout()}>Вийти</button></div></div></details>
+          <details className="mobile-more-nav"><summary><span aria-hidden="true">•••</span><strong>Ще</strong></summary><div>{nav.filter((item) => ["calendar", "coordination", "ideas", "settings"].includes(item.id)).map((item) => <a key={item.id} href={portalHref(item.id)} onClick={(event) => { if (!ordinaryLinkClick(event)) return; event.preventDefault(); event.currentTarget.closest("details")?.removeAttribute("open"); setView(item.id); }}><span aria-hidden="true">{item.icon}</span><strong>{item.label}</strong></a>)}<div className="mobile-account"><UserAvatar user={payload.currentUser} compact /><span><strong>{payload.currentUser.name}</strong><small>{roleLabels[payload.currentUser.role]}</small></span><button type="button" onClick={() => void logout()}>Вийти</button></div></div></details>
         </nav>
         <div className="sidebar-foot">
           <div className="sidebar-account"><UserAvatar user={payload.currentUser} compact /><div><strong>{payload.currentUser.name}</strong><small>{roleLabels[payload.currentUser.role]}</small></div><button type="button" onClick={() => void logout()} aria-label="Вийти з порталу" title="Вийти">↪</button></div>
@@ -1024,6 +1026,7 @@ export function PortalApp() {
           )}
           {view === "my" && <MyWork key={`${selected?.id || "empty"}-${workEntryFilter}-${workEntryFocus || "top"}`} payload={payload} selected={selected} selectedId={selectedId} setSelectedId={setSelectedId} initialFilter={workEntryFilter} focusTarget={workEntryFocus} userById={userById} canManage={canManage} saveWorkUpdate={saveWorkUpdate} resolveAcceptance={resolveAcceptance} completeNode={completeNode} openEdit={openEdit} copyNodeLink={copyNodeLink} trashAction={trashAction} setModal={setModal} asanaStatus={asanaStatus} mutate={mutate} setNotice={setNotice} openTree={(id) => { setSelectedId(id); setView("tree"); }} />}
           {view === "coordination" && <CoordinationView payload={payload} userById={userById} open={(node) => { setSelectedId(node.id); setModal("coordination"); }} />}
+          {view === "ideas" && <IdeasView user={payload.currentUser} users={payload.users} canCreateNode={canManage} notify={setNotice} createNode={(idea) => { setNodeErrors({}); setDraftNode({ ...blankNode([...payload.nodes, ...(payload.trashNodes || [])], undefined, payload.currentUser, "goal"), title: idea.title, description: idea.description }); setModal("node"); }} />}
           {view === "settings" && <SettingsView payload={payload} asanaStatus={asanaStatus} telegramStatus={telegramStatus} setTelegramStatus={setTelegramStatus} setNotice={setNotice} reload={load} trashAction={trashAction} />}
         </div>
       </section>

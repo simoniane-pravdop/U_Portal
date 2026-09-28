@@ -1603,7 +1603,7 @@ body { font-size: 14px; }
 
 @media (max-width: 760px) {
   .sidebar nav { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-  .sidebar nav .nav-calendar, .sidebar nav .nav-coordination, .sidebar nav .nav-settings { display: none; }
+  .sidebar nav .nav-calendar, .sidebar nav .nav-coordination, .sidebar nav .nav-ideas, .sidebar nav .nav-settings { display: none; }
   .mobile-more-nav { position: relative; display: block; min-width: 0; }
   .mobile-more-nav > summary { min-height: 48px; display: grid; place-items: center; gap: 2px; padding: 5px 2px; border-radius: 7px; color: #b8cadd; font-size: 8px; list-style: none; cursor: pointer; }
   .mobile-more-nav > summary::-webkit-details-marker { display: none; }
@@ -1661,4 +1661,39 @@ body { font-size: 14px; }
   .app-shell { display: block; }
   .content { padding: 0; }
   .panel, .node-detail { box-shadow: none; break-inside: avoid; }
+}
+
+/* Ideas remain lightweight; the management form supplies the hierarchy later. */
+.ideas-heading h1 { margin: 0 0 8px; font-size: 30px; }
+.ideas-heading p { margin: 0 0 18px; color: var(--muted); max-width: 850px; font-size: 17px; }
+.ideas-layout { display: grid; grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); gap: 16px; align-items: start; }
+.idea-form, .idea-card { padding: 18px; min-width: 0; }
+.idea-form { display: grid; gap: 14px; scroll-margin-top: 20px; }
+.idea-form h2, .idea-card h2 { margin: 0; font-size: 21px; overflow-wrap: anywhere; }
+.idea-form .field { min-width: 0; display: grid; gap: 6px; }
+.idea-form .field > span { color: var(--ink); font-size: 15px; font-weight: 700; }
+.ideas-page input, .ideas-page textarea { display: block; width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; background: #fff; color: var(--ink); font-size: 16px !important; }
+.ideas-page button { padding: 10px 14px; border: 1px solid var(--line); border-radius: 9px; background: #fff; color: var(--navy-800); font-size: 15px; font-weight: 700; }
+.ideas-page button.primary { background: var(--navy-800); border-color: var(--navy-800); color: #fff; }
+.idea-form textarea { resize: vertical; }
+.ideas-list { display: grid; gap: 12px; min-width: 0; }
+.ideas-list-toolbar { display: flex; gap: 8px; align-items: center; }
+.ideas-list-toolbar input { flex: 1; min-width: 0; }
+.ideas-list-toolbar span { white-space: nowrap; color: var(--muted); }
+.ideas-list-toolbar button { min-width: 44px; padding-inline: 10px; font-size: 22px; }
+.idea-card { display: grid; gap: 12px; }
+.idea-description { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; font-size: 17px; }
+.idea-meta, .idea-draft-hint, .idea-card > small { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+.idea-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.idea-actions button { min-height: 44px; white-space: normal; }
+.idea-error { color: #a32737; margin: 0; }
+.idea-empty { padding: 20px; }
+@media (max-width: 900px) {
+  .ideas-layout { grid-template-columns: 1fr; }
+}
+@media (max-width: 600px) {
+  .ideas-heading h1 { font-size: 25px; }
+  .ideas-heading p { font-size: 16px; }
+  .idea-form, .idea-card { padding: 14px; }
+  .idea-actions button { flex: 1 1 180px; }
 }
