@@ -113,10 +113,13 @@ test("stale versions, concurrent saves, active editors and anonymous requests ca
     } finally { sqlite.close(); }
   }
 });
-test("action menu raises its header above sticky navigation and both entry points provide deletion", async () => {
+test("action menu uses a body-level layer above sticky navigation and both entry points provide deletion", async () => {
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
   const ui = await readFile(new URL("../app/PortalApp.tsx", import.meta.url), "utf8");
-  assert.match(css, /\.work-desk-head:has\(\.work-card-menu\[open\]\)\s*\{[^}]*z-index:\s*50/);
+  const menu = await readFile(new URL("../app/components/CardActionsMenu.tsx", import.meta.url), "utf8");
+  assert.match(css, /\.work-card-actions-popover\s*\{[^}]*position:\s*fixed;[^}]*z-index:\s*200/);
+  assert.match(menu, /createPortal\([\s\S]*document\.body\)/);
+  assert.match(ui, /<CardActionsMenu key=\{current.id\}>/);
   assert.match(ui, /trashAction\(current, "delete"\)/);
   assert.match(ui, /trashAction\(node, "delete"\)/);
   assert.match(ui, /<TrashPanel payload=/);

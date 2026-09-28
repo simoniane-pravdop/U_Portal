@@ -1471,16 +1471,13 @@ body { font-size: 14px; }
 .work-inbox { top: 16px; }
 .work-desk-actions { position: relative; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .primary-completion { min-height: 38px; padding-inline: 14px !important; color: #fff !important; border-color: var(--green) !important; background: var(--green) !important; }
-.work-card-menu { position: relative; }
-.work-card-menu summary { min-height: 38px; display: grid; place-items: center; padding: 8px 11px; border: 1px solid var(--line); border-radius: 7px; color: var(--navy-800); background: #fff; font-size: 12px; font-weight: 850; list-style: none; cursor: pointer; }
-.work-card-menu summary::-webkit-details-marker { display: none; }
-.work-card-menu[open] { z-index: 40; }
-.work-desk-head:has(.work-card-menu[open]) { position: relative; z-index: 50; }
-.work-card-menu > div { position: absolute; z-index: 40; top: 43px; right: 0; width: 210px; display: grid; gap: 3px; padding: 6px; border: 1px solid var(--line); border-radius: 9px; background: #fff; box-shadow: 0 14px 36px rgba(10,34,61,.2); }
-.work-card-menu > div button { min-height: 38px; padding: 8px 9px; text-align: left; border: 0; border-radius: 6px; color: var(--ink); background: #fff; font-size: 12px; font-weight: 750; }
-.work-card-menu > div button:hover { background: #f1f5f8; }
-.work-card-menu > div button.delete { color: #a02832; }
-.work-card-menu > div button.delete:hover { color: #fff; background: #a02832; }
+.work-desk-head .work-card-menu-trigger { min-height: 38px; padding: 8px 11px; border: 1px solid var(--line); border-radius: 7px; color: var(--navy-800); background: #fff; font-size: 14px; font-weight: 850; cursor: pointer; }
+.work-card-actions-popover { position: fixed; z-index: 200; width: 230px; max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px); overflow-y: auto; display: grid; gap: 3px; padding: 6px; border: 1px solid var(--line); border-radius: 9px; background: #fff; box-shadow: 0 14px 36px rgba(10,34,61,.2); }
+.work-card-actions-popover button { min-height: 40px; padding: 8px 9px; text-align: left; border: 0; border-radius: 6px; color: var(--ink); background: #fff; font-size: 14px; font-weight: 750; }
+.work-card-actions-popover button:hover, .work-card-actions-popover button:focus-visible { background: #f1f5f8; }
+.work-card-actions-popover button.delete { color: #a02832; }
+.work-card-actions-popover button.delete:hover { color: #fff; background: #a02832; }
+.work-card-actions-popover button:disabled { color: #66758a; cursor: not-allowed; }
 .trash-panel { margin: 18px 0; overflow: visible; }
 .trash-panel > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px; cursor: pointer; color: var(--navy-800); font-size: 18px; font-weight: 800; }
 .trash-panel > summary b { font-size: 14px; font-weight: 600; }
@@ -1496,8 +1493,8 @@ body { font-size: 14px; }
 .trash-branch summary { cursor: pointer; padding: 7px 0; }
 .trash-branch ul { margin: 6px 0; padding-left: 22px; line-height: 1.6; }
 @media (max-width: 600px) {
-  .work-card-menu > div { position: fixed; top: auto; right: 8px; bottom: calc(65px + env(safe-area-inset-bottom)); left: 8px; width: auto; }
-  .work-card-menu > div button { min-height: 44px; font-size: 15px; }
+  .work-card-actions-popover { top: auto; right: 8px; bottom: calc(65px + env(safe-area-inset-bottom)); left: 8px; width: auto; max-height: calc(100dvh - 81px - env(safe-area-inset-bottom)); }
+  .work-card-actions-popover button { min-height: 44px; font-size: 15px; }
   .trash-panel > summary { flex-wrap: wrap; }
   .trash-list > article { grid-template-columns: minmax(0,1fr); }
   .trash-list button { justify-self: start; }

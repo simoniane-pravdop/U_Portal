@@ -169,7 +169,7 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /Паспорт робочої картки/);
   assert.match(source, /work-card-description/);
   assert.match(source, /work-card-sections/);
-  assert.match(source, /work-card-menu/);
+  assert.match(source, /CardActionsMenu/);
   assert.match(source, /OpenBlockersPanel/);
   assert.match(source, /Є ризик виконання/);
   assert.match(source, /completionBlockReason/);
