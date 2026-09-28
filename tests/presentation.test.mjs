@@ -8,6 +8,15 @@ import ts from "typescript";
 
 const require = createRequire(import.meta.url);
 
+test("tree disclosure buttons reserve their full width at desktop and touch sizes", async () => {
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(css, /--tree-toggle-size: 32px; grid-template-columns: var\(--tree-toggle-size\) minmax\(0, 1fr\) auto/);
+  assert.match(css, /\.tree-row \{ --tree-toggle-size: 44px; \}/);
+  assert.match(css, /\.compact-tree \.tree-row \{ grid-template-columns: var\(--tree-toggle-size\) minmax\(0, 1fr\)/);
+  const source = await readFile(new URL("../app/PortalApp.tsx", import.meta.url), "utf8");
+  assert.match(source, /className="tree-chevron"/);
+});
+
 async function loadComponent(path, jsx = false) {
   const source = await readFile(new URL(path, import.meta.url), "utf8");
   const { outputText } = ts.transpileModule(source, {

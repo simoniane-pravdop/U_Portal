@@ -8,6 +8,7 @@ import {
   validatePassword,
 } from "../../../lib/server";
 import type { PortalPayload, PortalRole, PortalState, PortalUser } from "../../../types";
+import { mayResetPassword } from "../../../lib/user-password";
 
 export const dynamic = "force-dynamic";
 
@@ -53,13 +54,18 @@ export async function POST(request: Request) {
   const target = body.userId ? next.users.find((user) => user.id === body.userId) : undefined;
   if (body.action !== "create" && !target) return jsonError("Користувача не знайдено", 404);
   if (target?.role === "owner") return jsonError("Обліковий запис власника порталу захищений від змін", 403);
-  if (body.action !== "create" && !mayManage(actor, target)) return jsonError("Недостатньо повноважень для цього користувача", 403);
+  if (body.action !== "create" && target && !(body.action === "reset_password" ? mayResetPassword(actor, target) : mayManage(actor, target))) return jsonError("Недостатньо повноважень для цього користувача", 403);
 
   let actionLabel = "Оновлено доступ користувача";
   const entityId = target?.id || crypto.randomUUID();
   let credentialStatement: D1PreparedStatement | null = null;
   const followUpStatements: D1PreparedStatement[] = [];
   const now = new Date().toISOString();
+  const operationId = crypto.randomUUID();
+  // D1/SQLite batches commit zero-change statements too. Credential/session writes
+  // must therefore run only if this exact operation won the state revision update.
+  const committedGuard = "EXISTS (SELECT 1 FROM portal_state WHERE id = 'main' AND revision = ? AND json_extract(payload, '$.audit[0].id') = ?)";
+  const guarded = (sql: string, values: (string | number)[]) => db.prepare(sql).bind(...values, current.revision + 1, operationId);
 
   if (body.action === "create") {
     const name = body.name?.trim() || "";
@@ -74,8 +80,8 @@ export async function POST(request: Request) {
     next.users.push(user);
     const credential = await hashPassword(body.password || "");
     credentialStatement = db.prepare(
-      "INSERT INTO portal_credentials (user_id, email, password_hash, password_salt, password_iterations, must_change_password, created_at, updated_at, created_by) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)",
-    ).bind(user.id, user.email, credential.passwordHash, credential.passwordSalt, credential.passwordIterations, now, now, actor.email);
+      "INSERT INTO portal_credentials (user_id, email, password_hash, password_salt, password_iterations, must_change_password, created_at, updated_at, created_by) SELECT ?, ?, ?, ?, ?, 0, ?, ?, ? WHERE " + committedGuard,
+    ).bind(user.id, user.email, credential.passwordHash, credential.passwordSalt, credential.passwordIterations, now, now, actor.email, current.revision + 1, operationId);
     actionLabel = `Додано користувача ${name}`;
   }
 
@@ -89,15 +95,15 @@ export async function POST(request: Request) {
     target.name = name;
     target.email = email;
     target.role = role;
-    followUpStatements.push(db.prepare("UPDATE portal_credentials SET email = ?, updated_at = ? WHERE user_id = ?").bind(email, now, target.id));
-    followUpStatements.push(db.prepare("DELETE FROM portal_sessions WHERE user_id = ? AND user_id <> ?").bind(target.id, actor.id));
+    followUpStatements.push(guarded("UPDATE portal_credentials SET email = ?, updated_at = ? WHERE user_id = ? AND " + committedGuard, [email, now, target.id]));
+    followUpStatements.push(guarded("DELETE FROM portal_sessions WHERE user_id = ? AND user_id <> ? AND " + committedGuard, [target.id, actor.id]));
     actionLabel = `Оновлено права ${name}`;
   }
 
   if (body.action === "toggle_active" && target) {
     if (target.id === actor.id) return jsonError("Не можна вимкнути власний обліковий запис", 400);
     target.active = !target.active;
-    if (!target.active) followUpStatements.push(db.prepare("DELETE FROM portal_sessions WHERE user_id = ?").bind(target.id));
+    if (!target.active) followUpStatements.push(guarded("DELETE FROM portal_sessions WHERE user_id = ? AND " + committedGuard, [target.id]));
     actionLabel = target.active ? `Активовано ${target.name}` : `Вимкнено ${target.name}`;
   }
 
@@ -106,9 +112,9 @@ export async function POST(request: Request) {
     if (passwordError) return jsonError(passwordError, 400);
     const credential = await hashPassword(body.password || "");
     credentialStatement = db.prepare(
-      "INSERT INTO portal_credentials (user_id, email, password_hash, password_salt, password_iterations, must_change_password, created_at, updated_at, created_by) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET email = excluded.email, password_hash = excluded.password_hash, password_salt = excluded.password_salt, password_iterations = excluded.password_iterations, must_change_password = 0, updated_at = excluded.updated_at, created_by = excluded.created_by",
-    ).bind(target.id, target.email.toLowerCase(), credential.passwordHash, credential.passwordSalt, credential.passwordIterations, now, now, actor.email);
-    followUpStatements.push(db.prepare("DELETE FROM portal_sessions WHERE user_id = ? AND user_id <> ?").bind(target.id, actor.id));
+      "INSERT INTO portal_credentials (user_id, email, password_hash, password_salt, password_iterations, must_change_password, created_at, updated_at, created_by) SELECT ?, ?, ?, ?, ?, 0, ?, ?, ? WHERE " + committedGuard + " ON CONFLICT(user_id) DO UPDATE SET email = excluded.email, password_hash = excluded.password_hash, password_salt = excluded.password_salt, password_iterations = excluded.password_iterations, must_change_password = 0, updated_at = excluded.updated_at, created_by = excluded.created_by",
+    ).bind(target.id, target.email.toLowerCase(), credential.passwordHash, credential.passwordSalt, credential.passwordIterations, now, now, actor.email, current.revision + 1, operationId);
+    followUpStatements.push(guarded("DELETE FROM portal_sessions WHERE user_id = ? AND user_id <> ? AND " + committedGuard, [target.id, actor.id]));
     actionLabel = `Створено новий пароль для ${target.name}`;
   }
 
@@ -131,7 +137,7 @@ export async function POST(request: Request) {
 
   next.version = Math.max(2, next.version || 2);
   next.revision = current.revision + 1;
-  next.audit = [{ id: crypto.randomUUID(), at: now, by: actor.name, action: actionLabel, entityId }, ...next.audit].slice(0, 500);
+  next.audit = [{ id: operationId, at: now, by: actor.name, action: actionLabel, entityId }, ...next.audit].slice(0, 500);
   const stateStatement = db.prepare(
     "UPDATE portal_state SET payload = ?, revision = ?, updated_at = ?, updated_by = ? WHERE id = ? AND revision = ?",
   ).bind(JSON.stringify(next), next.revision, now, actor.email, "main", current.revision);

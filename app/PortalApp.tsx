@@ -11,6 +11,7 @@ import { projectTaskResults } from "./lib/project-results";
 import { asanaLinkLabel, asanaLinks } from "./lib/asana-links";
 import { asanaTitleDiffers, primaryAsanaTitle } from "./lib/asana-integration";
 import { useAsanaTitles } from "./lib/use-asana-titles";
+import { generatePassword, mayResetPassword } from "./lib/user-password";
 import { LinkedText } from "./components/LinkedText";
 import { missingActiveTasksReason } from "./coordination-rules";
 import type {
@@ -1231,7 +1232,7 @@ function TreeView(props: {
     const lock = locks.find((item) => item.entityId === node.id && item.userId !== payload.currentUser.id);
     return <div key={node.id} className="tree-branch">
       <div className={`tree-row ${node.id === selectedId ? "selected" : ""} kind-${node.kind}`} style={{ paddingLeft: 3 + depth * 7 }}>
-        <button className={`tree-toggle ${hasChildren ? "has-children" : "is-leaf"}`} type="button" disabled={!hasChildren} aria-expanded={hasChildren ? expanded.has(node.id) : undefined} title={hasChildren ? `${expanded.has(node.id) ? "Згорнути" : "Розгорнути"} ${node.code}` : undefined} onClick={() => setExpanded((current) => { const next = new Set(current); if (next.has(node.id)) next.delete(node.id); else next.add(node.id); return next; })} aria-label={hasChildren ? `${expanded.has(node.id) ? "Згорнути" : "Розгорнути"} ${node.code}` : `${node.code} без нижчого рівня`}>{hasChildren ? (expanded.has(node.id) ? "⌄" : "›") : ""}</button>
+        <button className={`tree-toggle ${hasChildren ? "has-children" : "is-leaf"}`} type="button" disabled={!hasChildren} aria-expanded={hasChildren ? expanded.has(node.id) : undefined} title={hasChildren ? `${expanded.has(node.id) ? "Згорнути" : "Розгорнути"} ${node.code}` : undefined} onClick={() => setExpanded((current) => { const next = new Set(current); if (next.has(node.id)) next.delete(node.id); else next.add(node.id); return next; })} aria-label={hasChildren ? `${expanded.has(node.id) ? "Згорнути" : "Розгорнути"} ${node.code}` : `${node.code} без нижчого рівня`}>{hasChildren && <svg className="tree-chevron" width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m7 4 6 6-6 6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>}</button>
         <a className="tree-row-main" href={portalHref("tree", node.id)} onClick={(event) => { if (!ordinaryLinkClick(event)) return; event.preventDefault(); setSelectedId(node.id); setDetailTab("passport"); setMobilePane("card"); }}><span className="tree-code">{node.code}</span><span className="tree-name">{node.title}</span>{lock && <span className="editing-badge" title={`${lock.userName} редагує картку`}>✎ {lock.userName}</span>}<StatusBadge node={node} /></a>
         {mayEdit && <details className="tree-row-menu"><summary title={`Дії з ${kindLabels[node.kind].toLowerCase()}`} aria-label={`Дії з ${node.code}`}>⋮</summary><div>{treeMode === "archive" ? <button className="restore" onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void restoreBranch(node); }}><span>↺</span>Відновити гілку</button> : <><button disabled={Boolean(lock)} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void openEdit(node); }}><span>✎</span>{lock ? `Редагує ${lock.userName}` : "Редагувати"}</button>{node.kind === "goal" && <button onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); openCreateKind("cycle", node); }}><span>＋</span>Додати напрям зусиль</button>}{node.kind === "cycle" && <><button onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); openCreateKind("subcycle", node); }}><span>＋</span>Додати проект</button><button onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); openCreateKind("task", node); }}><span>✓</span>Додати завдання</button></>}{node.kind === "subcycle" && <button onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); openCreateKind("task", node); }}><span>✓</span>Додати завдання</button>}<button className="delete" onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void archiveBranch(node); }}><span>⌁</span>Перемістити в архів</button></>}</div></details>}
       </div>
@@ -1889,34 +1890,45 @@ function SettingsView({ payload, asanaStatus, telegramStatus, setTelegramStatus,
   </>;
 }
 
-function generatePassword() {
-  const groups = ["ABCDEFGHJKLMNPQRSTUVWXYZ", "abcdefghijkmnopqrstuvwxyz", "23456789", "!@#$%_-+"];
-  const alphabet = groups.join("");
-  const values = crypto.getRandomValues(new Uint32Array(20));
-  const characters = groups.map((group, index) => group[values[index] % group.length]);
-  for (let index = groups.length; index < values.length; index += 1) characters.push(alphabet[values[index] % alphabet.length]);
-  for (let index = characters.length - 1; index > 0; index -= 1) {
-    const target = values[index] % (index + 1);
-    [characters[index], characters[target]] = [characters[target], characters[index]];
-  }
-  return characters.join("");
+type PasswordPreview = { userId?: string; name: string; email: string; password: string; saved: boolean };
+
+function PasswordControls({ password, regenerate, disabled = false }: { password: string; regenerate?: () => void; disabled?: boolean }) {
+  const [copyMessage, setCopyMessage] = useState("");
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(password);
+      setCopyMessage("Пароль скопійовано");
+    } catch {
+      setCopyMessage("Не вдалося скопіювати автоматично. Виділіть пароль у полі та скопіюйте вручну.");
+    }
+  };
+  return <div className="password-controls">
+    <input readOnly value={password} aria-label="Згенерований пароль" autoComplete="off" spellCheck={false} onFocus={(event) => event.currentTarget.select()} />
+    <div className="password-control-actions">
+      {regenerate && <button type="button" className="secondary" disabled={disabled} onClick={regenerate}>Згенерувати інший</button>}
+      <button type="button" className="secondary" disabled={disabled} onClick={() => void copy()}>Копіювати пароль</button>
+    </div>
+    <small role="status" aria-live="polite">{copyMessage}</small>
+  </div>;
 }
 
 function UserLibraryEditor({ payload, reload, setNotice }: { payload: PortalPayload; reload: () => Promise<PortalPayload>; setNotice: Notify }) {
   const [newUser, setNewUser] = useState(() => {
     let saved: { name?: string; email?: string; role?: PortalUser["role"] } = {};
-    if (typeof window !== "undefined") try { saved = JSON.parse(window.localStorage.getItem(`portal:contact-draft:${payload.currentUser.id}`) || "{}"); } catch { /* ignore invalid local draft */ }
+    if (typeof window !== "undefined") try { saved = JSON.parse(window.localStorage.getItem("portal:contact-draft:" + payload.currentUser.id) || "{}"); } catch { /* ignore invalid local draft */ }
     return { name: saved.name || "", email: saved.email || "", role: saved.role || "executor" as PortalUser["role"], password: generatePassword() };
   });
-  const [issued, setIssued] = useState<{ name: string; password: string } | null>(null);
+  const [preview, setPreview] = useState<PasswordPreview | null>(null);
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [passwordError, setPasswordError] = useState("");
   const editable = ["owner", "admin"].includes(payload.currentUser.role);
   const roleOptions = Object.entries(roleLabels).filter(([value]) => value !== "owner" && (payload.currentUser.role === "owner" || value !== "admin"));
   useEffect(() => {
-    try { window.localStorage.setItem(`portal:contact-draft:${payload.currentUser.id}`, JSON.stringify({ name: newUser.name, email: newUser.email, role: newUser.role })); } catch { /* local draft is best-effort */ }
+    // Never persist passwords in a draft, localStorage, notifications or the audit log.
+    try { window.localStorage.setItem("portal:contact-draft:" + payload.currentUser.id, JSON.stringify({ name: newUser.name, email: newUser.email, role: newUser.role })); } catch { /* local draft is best-effort */ }
   }, [newUser.email, newUser.name, newUser.role, payload.currentUser.id]);
-  const manage = async (body: Record<string, unknown>) => {
+  const manage = async (body: Record<string, unknown>, committed?: () => void) => {
     setBusy(true);
     setNotice("");
     try {
@@ -1925,11 +1937,14 @@ function UserLibraryEditor({ payload, reload, setNotice }: { payload: PortalPayl
         const response = await fetch("/api/admin/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...body, expectedRevision: revision }) });
         const result = (await response.json()) as { error?: string };
         if (response.ok) {
-          await reload();
-          setNotice(attempt ? "Контакт додано після автоматичного оновлення даних" : "Доступ користувача оновлено");
+          // Show the issued password immediately: a failed list refresh must not hide a committed reset.
+          committed?.();
+          const message = body.action === "reset_password" ? "Новий пароль збережено. Скопіюйте його у відкритому вікні." : body.action === "create" ? "Обліковий запис створено. Скопіюйте пароль у відкритому вікні." : "Доступ користувача оновлено";
+          try { await reload(); setNotice(message); }
+          catch { setNotice(message + " Список не вдалося оновити; оновіть сторінку після копіювання пароля.", "error"); }
           return true;
         }
-        if (response.status === 409 && attempt === 0) {
+        if (response.status === 409 && attempt === 0 && result.error === "Конфлікт одночасного редагування") {
           revision = (await reload()).revision;
           continue;
         }
@@ -1937,32 +1952,71 @@ function UserLibraryEditor({ payload, reload, setNotice }: { payload: PortalPayl
       }
       return false;
     } catch (cause) {
-      setNotice(cause instanceof Error ? cause.message : "Не вдалося оновити доступ", "error");
+      const message = cause instanceof Error ? cause.message : "Не вдалося оновити доступ";
+      if (body.action === "reset_password") setPasswordError(message);
+      setNotice(message, "error");
       return false;
-    } finally {
-      setBusy(false);
-    }
+    } finally { setBusy(false); }
   };
   const add = async () => {
-    const next = { name: !newUser.name.trim() ? "Вкажіть ім’я та прізвище." : "", email: !newUser.email.trim() ? "Вкажіть корпоративну адресу." : !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newUser.email.trim()) ? "Перевірте формат адреси." : "", password: !newUser.password ? "Згенеруйте тимчасовий пароль." : "" };
+    const next = { name: !newUser.name.trim() ? "Вкажіть ім’я та прізвище." : "", email: !newUser.email.trim() ? "Вкажіть корпоративну адресу." : !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newUser.email.trim()) ? "Перевірте формат адреси." : "", password: !newUser.password ? "Згенеруйте пароль." : "" };
     const active = Object.fromEntries(Object.entries(next).filter(([, value]) => value));
     if (Object.keys(active).length) { setErrors(active); setNotice("Не вдалося створити доступ: перевірте виділені поля.", "error"); focusFirstError(); return; }
-    const password = newUser.password;
-    const ok = await manage({ action: "create", ...newUser });
-    if (ok) {
-      setIssued({ name: newUser.name.trim(), password });
+    const issued = { name: newUser.name.trim(), email: newUser.email.trim().toLowerCase(), password: newUser.password, saved: true };
+    await manage({ action: "create", ...newUser }, () => {
+      setPasswordError("");
+      setPreview(issued);
       setNewUser({ name: "", email: "", role: "executor", password: generatePassword() });
-      try { window.localStorage.removeItem(`portal:contact-draft:${payload.currentUser.id}`); } catch { /* local draft is best-effort */ }
+      try { window.localStorage.removeItem("portal:contact-draft:" + payload.currentUser.id); } catch { /* local draft is best-effort */ }
       setErrors({});
-    }
+    });
   };
-  const resetPassword = async (user: PortalUser) => {
-    const password = generatePassword();
-    const ok = await manage({ action: "reset_password", userId: user.id, password });
-    if (ok) setIssued({ name: user.name, password });
+  const openPassword = (user: PortalUser) => {
+    setPasswordError("");
+    setPreview({ userId: user.id, name: user.name, email: user.email, password: generatePassword(), saved: false });
   };
+  const savePassword = async () => {
+    if (!preview || preview.saved || busy) return;
+    setPasswordError("");
+    await manage({ action: "reset_password", userId: preview.userId, password: preview.password }, () => setPreview({ ...preview, saved: true }));
+  };
+  const closePassword = () => { if (!busy) { setPreview(null); setPasswordError(""); } };
   const canEdit = (user: PortalUser) => editable && user.role !== "owner" && (payload.currentUser.role === "owner" || user.role !== "admin");
-  return <section className="panel user-library"><div className="panel-head"><div><span>Користувачі та доступ</span><h2>Редактор учасників</h2></div><div className="library-head-meta"><small>{editable ? "Створення доступу, ролей і паролів" : "Перегляд без редагування"}</small><b className="count">{payload.users.filter((user) => user.active).length}</b></div></div>{issued && <div className="password-reveal"><div><span>Новий пароль для {issued.name}</span><strong>{issued.password}</strong><small>Скопіюйте зараз: після закриття цей пароль більше не показуватиметься.</small></div><button onClick={() => void navigator.clipboard.writeText(issued.password)}>Копіювати</button><button className="secondary" onClick={() => setIssued(null)}>Закрити</button></div>}<div className="library-add"><Field label="Ім’я та прізвище" required error={errors.name} hint="Повне ім’я, яке відображатиметься у відповідальних і звітах."><input disabled={!editable || busy} aria-invalid={Boolean(errors.name)} value={newUser.name} onChange={(event) => { setNewUser({ ...newUser, name: event.target.value }); setErrors((current) => ({ ...current, name: "" })); }} placeholder="Наприклад: Ірина Коваль" /></Field><Field label="Корпоративна адреса" required error={errors.email} hint="Ця адреса буде логіном користувача."><input disabled={!editable || busy} aria-invalid={Boolean(errors.email)} type="email" value={newUser.email} onChange={(event) => { setNewUser({ ...newUser, email: event.target.value }); setErrors((current) => ({ ...current, email: "" })); }} placeholder="name@pravdop.com" /></Field><Field label="Роль доступу" required hint="Координатор бачить усі картки. Редагування й погодження залежать від участі в картці; роль координатора сама їх не надає."><select disabled={!editable || busy} value={newUser.role} onChange={(event) => setNewUser({ ...newUser, role: event.target.value as PortalUser["role"] })}>{roleOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field><Field label="Тимчасовий пароль" required error={errors.password} hint="Передайте пароль користувачу захищеним каналом; після входу його слід змінити."><div className="generated-password"><input readOnly value={newUser.password} aria-label="Згенерований пароль" aria-invalid={Boolean(errors.password)} /><button type="button" disabled={!editable || busy} onClick={() => { setNewUser({ ...newUser, password: generatePassword() }); setErrors((current) => ({ ...current, password: "" })); }}>↻</button></div></Field><button className="primary" disabled={!editable || busy} onClick={() => void add()}>+ Створити доступ</button></div><div className="user-library-table">{payload.users.map((user) => { const rowEditable = canEdit(user); return <div key={user.id}><UserAvatar user={user} /><label><span>Ім’я <i className="required-mark">*</i></span><input disabled={!rowEditable || busy} defaultValue={user.name} onBlur={(event) => { const value = event.target.value.trim(); if (value && value !== user.name) void manage({ action: "update", userId: user.id, name: value, email: user.email, role: user.role }); }} /></label><label><span>Логін <i className="required-mark">*</i></span><input disabled={!rowEditable || busy} type="email" defaultValue={user.email} onBlur={(event) => { const value = event.target.value.trim(); if (value && value !== user.email) void manage({ action: "update", userId: user.id, name: user.name, email: value, role: user.role }); }} /></label><label><span>Роль доступу <i className="required-mark">*</i></span><select disabled={!rowEditable || busy} value={user.role} onChange={(event) => void manage({ action: "update", userId: user.id, name: user.name, email: user.email, role: event.target.value })}>{!roleOptions.some(([value]) => value === user.role) && <option value={user.role}>{roleLabels[user.role]}</option>}{roleOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><button disabled={!rowEditable || busy} className="password-reset-button" onClick={() => void resetPassword(user)}>Новий пароль</button><button disabled={!rowEditable || busy || user.id === payload.currentUser.id} className={user.active ? "user-active-button" : "user-inactive-button"} onClick={() => void manage({ action: "toggle_active", userId: user.id })}>{user.active ? "Активний" : "Вимкнено"}</button></div>; })}</div></section>;
+  return <section className="panel user-library">
+    <div className="panel-head"><div><span>Користувачі та доступ</span><h2>Редактор учасників</h2></div><div className="library-head-meta"><small>{editable ? "Створення доступу, ролей і паролів" : "Перегляд без редагування"}</small><b className="count">{payload.users.filter((user) => user.active).length}</b></div></div>
+    <div className="library-add">
+      <Field label="Ім’я та прізвище" required error={errors.name} hint="Повне ім’я, яке відображатиметься у відповідальних і звітах."><input disabled={!editable || busy} aria-invalid={Boolean(errors.name)} value={newUser.name} onChange={(event) => { setNewUser({ ...newUser, name: event.target.value }); setErrors((current) => ({ ...current, name: "" })); }} placeholder="Наприклад: Ірина Коваль" /></Field>
+      <Field label="Корпоративна адреса" required error={errors.email} hint="Ця адреса буде логіном користувача."><input disabled={!editable || busy} aria-invalid={Boolean(errors.email)} type="email" value={newUser.email} onChange={(event) => { setNewUser({ ...newUser, email: event.target.value }); setErrors((current) => ({ ...current, email: "" })); }} placeholder="name@pravdop.com" /></Field>
+      <Field label="Роль доступу" required hint="Координатор бачить усі картки. Редагування й погодження залежать від участі в картці; роль координатора сама їх не надає."><select disabled={!editable || busy} value={newUser.role} onChange={(event) => setNewUser({ ...newUser, role: event.target.value as PortalUser["role"] })}>{roleOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
+      <Field label="Пароль для входу" required error={errors.password} hint="Портал не надсилає пароль на пошту. Скопіюйте його та передайте користувачу захищеним каналом."><PasswordControls key={newUser.password} password={newUser.password} disabled={!editable || busy} regenerate={() => { setNewUser({ ...newUser, password: generatePassword() }); setErrors((current) => ({ ...current, password: "" })); }} /></Field>
+      <button className="primary" disabled={!editable || busy} onClick={() => void add()}>{busy ? "Збереження…" : "+ Створити доступ"}</button>
+    </div>
+    <p className="password-delivery-note">Паролі створює адміністратор і передає користувачу особисто. На пошту вони не надсилаються. «Новий пароль» спочатку відкриває попередній перегляд; зміна діє лише після збереження.</p>
+    <div className="user-library-table">{payload.users.map((user) => {
+      const rowEditable = canEdit(user);
+      return <div key={user.id}>
+        <UserAvatar user={user} />
+        <label><span>Ім’я <i className="required-mark">*</i></span><input disabled={!rowEditable || busy} defaultValue={user.name} onBlur={(event) => { const value = event.target.value.trim(); if (value && value !== user.name) void manage({ action: "update", userId: user.id, name: value, email: user.email, role: user.role }); }} /></label>
+        <label><span>Логін <i className="required-mark">*</i></span><input disabled={!rowEditable || busy} type="email" defaultValue={user.email} onBlur={(event) => { const value = event.target.value.trim(); if (value && value !== user.email) void manage({ action: "update", userId: user.id, name: user.name, email: value, role: user.role }); }} /></label>
+        <label><span>Роль доступу <i className="required-mark">*</i></span><select disabled={!rowEditable || busy} value={user.role} onChange={(event) => void manage({ action: "update", userId: user.id, name: user.name, email: user.email, role: event.target.value })}>{!roleOptions.some(([value]) => value === user.role) && <option value={user.role}>{roleLabels[user.role]}</option>}{roleOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+        <button type="button" disabled={!mayResetPassword(payload.currentUser, user) || busy} className="password-reset-button" onClick={() => openPassword(user)}>Новий пароль</button>
+        <button disabled={!rowEditable || busy || user.id === payload.currentUser.id} className={user.active ? "user-active-button" : "user-inactive-button"} onClick={() => void manage({ action: "toggle_active", userId: user.id })}>{user.active ? "Активний" : "Вимкнено"}</button>
+      </div>;
+    })}</div>
+    {preview && <ModalShell title={preview.saved ? "Пароль збережено" : "Новий пароль"} subtitle="Керування доступом" close={closePassword} footer={<>
+      <button type="button" className="secondary" disabled={busy} onClick={closePassword}>{preview.saved ? "Закрити" : "Скасувати"}</button>
+      {!preview.saved && <button type="button" className="primary" disabled={busy} onClick={() => void savePassword()}>{busy ? "Збереження…" : "Зберегти новий пароль"}</button>}
+    </>}>
+      <div className="password-dialog-content">
+        <p><strong>{preview.name}</strong><br /><span>Логін: {preview.email}</span></p>
+        <p className={preview.saved ? "password-confirmation" : "password-warning"} role="status">{preview.saved ? "Новий пароль уже діє. Скопіюйте його перед закриттям вікна." : "Поточний пароль ще не змінено. Після збереження користувач має входити з новим паролем."}</p>
+        <PasswordControls key={preview.password} password={preview.password} disabled={busy} regenerate={preview.saved ? undefined : () => setPreview({ ...preview, password: generatePassword() })} />
+        {passwordError && <p className="password-dialog-error" role="alert">{passwordError}</p>}
+        <p>На пошту пароль не надсилається. Передайте логін і пароль користувачу захищеним каналом.</p>
+        <p>Після закриття чи оновлення сторінки побачити цей пароль повторно не можна — можна лише згенерувати новий.</p>
+      </div>
+    </ModalShell>}
+  </section>;
 }
 
 function ModalShell({ title, subtitle, close, children, footer }: { title: string; subtitle: string; close: () => void; children: React.ReactNode; footer: React.ReactNode }) {
