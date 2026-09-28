@@ -12,6 +12,7 @@ const noImports = (source) => source.replace(/^import .*;\n/gm, "");
 const server = await read("app/lib/server.ts");
 const ui = await read("app/PortalApp.tsx");
 const source = [
+  'const trashFields = ["deletedAt", "deletedById", "deletedBatchId", "trashPreviousArchived"];',
   noImports(await read("app/lib/forecast-deadline.ts")),
   noImports(await read("app/lib/hierarchy.ts")),
   noImports(await read("app/lib/responsibility.ts")),
@@ -76,6 +77,31 @@ test("server rejects coordinator card and approval writes but allows communicati
   assert.equal((await post(state, coordinator, (next) => { next.discussions.push({ id: "comment", nodeId: "task", authorId: coordinator.id, recipientId: initiator.id, kind: "comment", text: "x", createdAt: new Date().toISOString() }); })).status, 200);
   state.notifications.push({ id: "notice", userId: coordinator.id, nodeId: "task", readAt: "" });
   assert.equal((await post(state, coordinator, (next) => { next.notifications[0].readAt = "2026-09-15T12:00:00Z"; }, "Сповіщення прочитано")).status, 200);
+});
+
+test("ordinary saves preserve removed cards and their relations for administrators and other users", async () => {
+  const state = fixture();
+  const removed = makeNode("removed", { archived: true, deletedAt: "2026-09-28T10:00:00Z", deletedById: "admin", deletedBatchId: "removed", trashPreviousArchived: false });
+  state.nodes.push(removed);
+  state.discussions.push({ id: "removed-message", nodeId: removed.id, text: "Keep" });
+  state.blockers.push({ id: "removed-blocker", nodeId: removed.id, status: "open" });
+  state.dependencies.push({ id: "removed-dependency", predecessorId: removed.id, successorId: "task" });
+  for (const actor of [user("admin", "admin"), executor]) {
+    const visible = rules.stateForUser(state, actor);
+    assert.deepEqual(visible.nodes.map((node) => node.id), ["task"]);
+    assert.deepEqual(visible.trashNodes, [removed]);
+    assert.equal((await post(state, actor, (next) => { next.nodes[0].progress = 20; })).status, 200);
+    const saved = rules.savedState();
+    assert.deepEqual(saved.nodes.find((node) => node.id === removed.id), removed);
+    assert.deepEqual(saved.discussions, state.discussions);
+    assert.deepEqual(saved.blockers, state.blockers);
+    assert.deepEqual(saved.dependencies, state.dependencies);
+    assert.equal(saved.trashNodes, undefined);
+  }
+  assert.equal((await post(state, user("admin", "admin"), (next) => { next.nodes.push({ ...removed, deletedAt: undefined }); })).status, 409);
+  assert.equal((await post(state, user("admin", "admin"), (next) => { next.nodes[0].deletedAt = "forged"; })).status, 409);
+  assert.equal((await post(state, user("admin", "admin"), (next) => { next.nodes[0].code = removed.code; })).status, 409);
+  assert.equal((await post(state, user("admin", "admin"), (next) => { next.nodes[0].parentId = removed.id; })).status, 409);
 });
 
 test("a reader can comment or report an issue without changing status or creating a blocker", async () => {

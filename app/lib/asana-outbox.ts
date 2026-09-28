@@ -35,6 +35,8 @@ export async function flushAsanaOutbox(request: Request, authorId: string, nodeI
   const storyCache = new Map<string, Map<string, string>>();
   for (const row of rows.results || []) {
     const node = state.nodes.find((item) => item.id === row.node_id);
+    // Pause outbound comments while a card is removed; restoration resumes delivery.
+    if (node?.deletedAt) continue;
     // Never send an old queued event to a task that has since been detached or replaced.
     if (!node || node.asana.taskGid !== row.task_gid) {
       await db.prepare("UPDATE asana_outbox SET status = 'cancelled', last_error = ? WHERE event_id = ?").bind("Головну задачу Asana змінено", row.event_id).run();

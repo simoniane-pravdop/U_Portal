@@ -19,7 +19,7 @@ export function routePendingRequests(state: PortalState, notify = false, now = n
   const nodes = new Map(state.nodes.map((node) => [node.id, node]));
   const route = (item: { id: string; nodeId: string }, previous: string, type: "blocker" | "decision" | "acceptance") => {
     const node = nodes.get(item.nodeId);
-    if (!node?.acceptorId || node.acceptorId === previous) return previous;
+    if (!node?.acceptorId || node.deletedAt || node.acceptorId === previous) return previous;
     for (const message of state.discussions || []) {
       if (message.relatedType === type && message.relatedId === item.id && !message.resolvedAt) message.recipientId = node.acceptorId;
     }

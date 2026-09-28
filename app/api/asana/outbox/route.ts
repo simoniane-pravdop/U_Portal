@@ -21,7 +21,7 @@ export async function POST(request: Request) {
   if (!user) return jsonError("Потрібен вхід", 401);
   const body = await request.json() as { nodeId?: string };
   const node = state.nodes.find((item) => item.id === body.nodeId);
-  if (!node) return jsonError("Картку не знайдено", 404);
+  if (!node || node.deletedAt) return jsonError("Картку не знайдено", 404);
   try {
     return Response.json(await flushAsanaOutbox(request, user.id, node.id));
   } catch (error) {

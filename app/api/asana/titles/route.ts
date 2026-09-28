@@ -13,7 +13,7 @@ export async function GET(request: Request) {
 
   const nodeId = new URL(request.url).searchParams.get("nodeId") || "";
   const node = state.nodes.find((item) => item.id === nodeId);
-  if (!node) return jsonError("Картку не знайдено", 404);
+  if (!node || node.deletedAt) return jsonError("Картку не знайдено", 404);
 
   const links = asanaLinks(node.controlPlace, node.description, node.asana.taskUrl, ...node.evidence.map((item) => item.value));
   const gidByUrl = new Map(links.map((url) => [url, asanaTaskGid(url)]).filter((entry): entry is [string, string] => Boolean(entry[1])));

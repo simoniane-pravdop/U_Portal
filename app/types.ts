@@ -117,6 +117,11 @@ export type WorkNode = {
   controlPlace: string;
   visibility: "company" | "participants";
   archived: boolean;
+  /** Recoverable removal; assigned only by the trash endpoint. */
+  deletedAt?: string;
+  deletedById?: string;
+  deletedBatchId?: string;
+  trashPreviousArchived?: boolean;
   evidence: Evidence[];
   updates?: WorkUpdate[];
   recurrence: Recurrence;
@@ -285,6 +290,8 @@ export type SessionUser = PortalUser & {
 };
 
 export type PortalPayload = PortalState & {
+  /** Removed cards are separate from the editable/live state. Codes remain reserved. */
+  trashNodes?: WorkNode[];
   currentUser: SessionUser;
   storage: "database" | "memory";
   authConfigured: boolean;

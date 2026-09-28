@@ -134,7 +134,7 @@ test("durable storage and integration bindings are declared", async () => {
   assert.match(stateRoute, /managesBlocker/);
   assert.match(stateRoute, /stateForUser/);
   assert.match(stateRoute, /mergeHiddenState/);
-  assert.match(stateRoute, /user\.active \? state\.nodes\.map/);
+  assert.match(stateRoute, /user\.active \? state\.nodes\.filter\(\(node\) => !node\.deletedAt\)\.map/);
   assert.ok(stateRoute.indexOf("body.expectedRevision !== current.revision") < stateRoute.indexOf("Журнал змін формується сервером"));
   assert.match(stateRoute, /administrator \? state\.audit/);
   assert.match(stateRoute, /audit: current\.audit/);

@@ -1475,9 +1475,33 @@ body { font-size: 14px; }
 .work-card-menu summary { min-height: 38px; display: grid; place-items: center; padding: 8px 11px; border: 1px solid var(--line); border-radius: 7px; color: var(--navy-800); background: #fff; font-size: 12px; font-weight: 850; list-style: none; cursor: pointer; }
 .work-card-menu summary::-webkit-details-marker { display: none; }
 .work-card-menu[open] { z-index: 40; }
+.work-desk-head:has(.work-card-menu[open]) { position: relative; z-index: 50; }
 .work-card-menu > div { position: absolute; z-index: 40; top: 43px; right: 0; width: 210px; display: grid; gap: 3px; padding: 6px; border: 1px solid var(--line); border-radius: 9px; background: #fff; box-shadow: 0 14px 36px rgba(10,34,61,.2); }
 .work-card-menu > div button { min-height: 38px; padding: 8px 9px; text-align: left; border: 0; border-radius: 6px; color: var(--ink); background: #fff; font-size: 12px; font-weight: 750; }
 .work-card-menu > div button:hover { background: #f1f5f8; }
+.work-card-menu > div button.delete { color: #a02832; }
+.work-card-menu > div button.delete:hover { color: #fff; background: #a02832; }
+.trash-panel { margin: 18px 0; overflow: visible; }
+.trash-panel > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px; cursor: pointer; color: var(--navy-800); font-size: 18px; font-weight: 800; }
+.trash-panel > summary b { font-size: 14px; font-weight: 600; }
+.trash-content { padding: 0 16px 16px; font-size: 15px; }
+.trash-content > p { line-height: 1.5; color: var(--muted); }
+.trash-content > input { width: 100%; min-height: 42px; margin-bottom: 12px; padding: 9px; border: 1px solid var(--line); border-radius: 7px; }
+.trash-list { display: grid; gap: 10px; }
+.trash-list > article { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: start; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #f4f7fa; }
+.trash-list article > div { display: grid; gap: 5px; overflow-wrap: anywhere; }
+.trash-list article small, .trash-list article span { font-size: 14px; color: var(--muted); }
+.trash-list button { min-height: 44px; padding: 8px 12px; }
+.trash-branch, .trash-hint { grid-column: 1 / -1; }
+.trash-branch summary { cursor: pointer; padding: 7px 0; }
+.trash-branch ul { margin: 6px 0; padding-left: 22px; line-height: 1.6; }
+@media (max-width: 600px) {
+  .work-card-menu > div { position: fixed; top: auto; right: 8px; bottom: calc(65px + env(safe-area-inset-bottom)); left: 8px; width: auto; }
+  .work-card-menu > div button { min-height: 44px; font-size: 15px; }
+  .trash-panel > summary { flex-wrap: wrap; }
+  .trash-list > article { grid-template-columns: minmax(0,1fr); }
+  .trash-list button { justify-self: start; }
+}
 .work-card-sections { position: sticky; z-index: 12; top: 0; display: flex; gap: 5px; padding: 8px 14px; overflow-x: auto; border-bottom: 1px solid var(--line); background: rgba(255,255,255,.96); }
 .work-card-sections button { flex: 0 0 auto; min-height: 34px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--navy-700); background: #fff; font-size: 11px; font-weight: 800; }
 .section-anchor, .status-update, .update-panel, .work-card-description, .discussion-panel, .manager-action-center, .asana-work { scroll-margin-top: 58px; }

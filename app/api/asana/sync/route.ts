@@ -42,7 +42,7 @@ async function readComments(userId: string, taskGid: string) {
 
 function mergeAsanaComments(state: PortalState, nodeId: string, stories: AsanaStory[]) {
   const node = state.nodes.find((item) => item.id === nodeId);
-  if (!node) return 0;
+  if (!node || node.deletedAt) return 0;
   let added = 0;
   for (const story of stories) {
     const content = story.text?.trim() || "";
@@ -140,7 +140,7 @@ export async function POST(request: Request) {
   if (!user) return jsonError("Потрібен вхід", 401);
   const body = (await request.json()) as SyncBody;
   const node = state.nodes.find((candidate) => candidate.id === body.nodeId);
-  if (!node) return jsonError("Об’єкт порталу не знайдено", 404);
+  if (!node || node.deletedAt) return jsonError("Об’єкт порталу не знайдено", 404);
   const mayRead = mayEdit(user, node.acceptorId) || node.assigneeId === user.id || node.acceptorId === user.id || node.participantIds.includes(user.id);
   if (!mayRead || body.action !== "read" && !mayEdit(user, node.acceptorId) && node.assigneeId !== user.id) return jsonError("Недостатньо повноважень", 403);
 

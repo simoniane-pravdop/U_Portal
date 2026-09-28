@@ -3,16 +3,17 @@ import { notifyTelegramUsers } from "../../lib/telegram";
 import { approvalChangeError, isDerivedHierarchyChange, routePendingRequests } from "../../lib/responsibility";
 import { nodeAuditChanges } from "../../lib/node-audit";
 import { flushAsanaOutbox } from "../../lib/asana-outbox";
+import { trashFields } from "../../lib/trash";
 import type { PortalNotification, PortalState, SessionUser } from "../../types";
 
 export const dynamic = "force-dynamic";
 
 function visibleNodeIds(state: PortalState, user: SessionUser) {
   // Portal access is authenticated; participation controls actions, not reading.
-  return new Set(user.active ? state.nodes.map((node) => node.id) : []);
+  return new Set(user.active ? state.nodes.filter((node) => !node.deletedAt).map((node) => node.id) : []);
 }
 
-function stateForUser(state: PortalState, user: SessionUser): PortalState {
+function stateForUser(state: PortalState, user: SessionUser): PortalState & { trashNodes: PortalState["nodes"] } {
   const ids = visibleNodeIds(state, user);
   const administrator = ["owner", "admin"].includes(user.role);
   const blockers = state.blockers.filter((item) => ids.has(item.nodeId));
@@ -21,6 +22,7 @@ function stateForUser(state: PortalState, user: SessionUser): PortalState {
   const decisionIds = new Set(decisions.map((item) => item.id));
   return {
     ...state,
+    trashNodes: user.active ? state.nodes.filter((node) => node.deletedAt) : [],
     nodes: state.nodes.filter((node) => ids.has(node.id)),
     dependencies: state.dependencies.filter((item) => ids.has(item.predecessorId) && ids.has(item.successorId)),
     blockers,
@@ -34,7 +36,6 @@ function stateForUser(state: PortalState, user: SessionUser): PortalState {
 }
 
 function mergeHiddenState(current: PortalState, submitted: PortalState, user: SessionUser): PortalState {
-  if (["owner", "admin"].includes(user.role)) return { ...submitted, notifications: [...(current.notifications || []).filter((item) => item.userId !== user.id), ...(submitted.notifications || [])], audit: current.audit };
   const visible = visibleNodeIds(current, user);
   const hiddenByNode = <T extends { nodeId: string }>(items: T[]) => items.filter((item) => !visible.has(item.nodeId));
   const hiddenBlockerIds = new Set(current.blockers.filter((item) => !visible.has(item.nodeId)).map((item) => item.id));
@@ -88,6 +89,17 @@ export async function POST(request: Request) {
       { status: 409, headers: { "Cache-Control": "no-store" } },
     );
   }
+  // Removed records stay server-side. Stale forms cannot resurrect or change them.
+  const removedIds = new Set(current.nodes.filter((node) => node.deletedAt).map((node) => node.id));
+  if (body.state.nodes.some((node) => removedIds.has(node.id) || trashFields.some((field) => node[field] !== undefined) || node.parentId && removedIds.has(node.parentId))) {
+    return jsonError("Картка перебуває в кошику. Відновіть її через налаштування.", 409);
+  }
+  const touchesRemoved = [
+    ...body.state.blockers, ...body.state.decisions, ...body.state.acceptances, ...(body.state.discussions || []),
+  ].some((item) => removedIds.has(item.nodeId)) || body.state.dependencies.some((item) => removedIds.has(item.predecessorId) || removedIds.has(item.successorId))
+    || body.state.coordinations.some((item) => removedIds.has(item.cycleId || item.subcycleId) || item.taskState.some((task) => removedIds.has(task.nodeId)));
+  if (touchesRemoved) return jsonError("Пов’язані дані картки в кошику не можна змінювати", 409);
+  delete (body.state as PortalState & { trashNodes?: unknown }).trashNodes;
   body.state = mergeHiddenState(current, body.state, user);
   const approvalError = approvalChangeError(current, body.state, user);
   if (approvalError) return jsonError(approvalError, 403);
@@ -112,6 +124,7 @@ export async function POST(request: Request) {
     const before = current.nodes.find((node) => node.id === id);
     const after = body.state.nodes.find((node) => node.id === id);
     if (!after) return jsonError("Записи не видаляються фізично — використайте контрольоване вилучення з дерева", 400);
+    if ((!before || before.code !== after.code) && body.state.nodes.some((node) => node.id !== id && node.code.trim().toLowerCase() === after.code.trim().toLowerCase())) return jsonError("Код уже використовується, зокрема карткою в кошику. Оберіть інший код.", 409);
     if (before && before.acceptorId !== after.acceptorId && !mayEdit(user, before.acceptorId)) return jsonError("Змінити ініціатора може лише поточний ініціатор або керівник з правом редагування.", 403);
     const mayCreate = !before && ["owner", "admin", "goal_owner", "cycle_owner"].includes(user.role);
     const resolvesDecision = current.decisions.some((decision) => decision.nodeId === id && decision.decisionOwnerId === user.id);

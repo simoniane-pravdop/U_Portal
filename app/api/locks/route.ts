@@ -35,7 +35,7 @@ export async function POST(request: Request) {
   const entityId = body.entityId?.trim() || "";
   if (!body.action || !entityId) return jsonError("Не вказано об’єкт редагування", 400);
   const node = state.nodes.find((item) => item.id === entityId);
-  if (body.action !== "release" && (!node || !mayEdit(user, node.acceptorId))) return jsonError("Недостатньо повноважень для редагування картки", 403);
+  if (body.action !== "release" && (!node || node.deletedAt || !mayEdit(user, node.acceptorId))) return jsonError("Недостатньо повноважень для редагування картки", 403);
   const { db, locks } = await activeLocks();
   if (!db) return jsonError("Сховище блокувань недоступне", 503);
 
