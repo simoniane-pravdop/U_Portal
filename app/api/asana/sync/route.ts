@@ -1,5 +1,5 @@
 import { asanaRequest } from "../../../lib/asana";
-import { ASANA_MANAGEMENT_TAG, portalOriginId, primaryAsanaTitle } from "../../../lib/asana-integration";
+import { ASANA_MANAGEMENT_TAG, portalOriginId, portalTaskDescriptionForAsana, primaryAsanaTitle } from "../../../lib/asana-integration";
 import { currentUser, database, jsonError, loadState, mayEdit } from "../../../lib/server";
 import type { PortalState, WorkUpdate } from "../../../types";
 
@@ -161,7 +161,7 @@ export async function POST(request: Request) {
         body: JSON.stringify({
           data: {
             name: primaryAsanaTitle(node),
-            notes: body.description || `${node.code}\n\n${node.result}\n\nКритерій приймання: ${node.acceptanceCriteria}`,
+            html_notes: portalTaskDescriptionForAsana(state.nodes, node, body.description),
             ...(body.projectGid ? { projects: [body.projectGid] } : { workspace: body.workspaceGid }),
             start_on: body.startOn && (body.dueOn || node.plannedEnd) ? body.startOn : undefined,
             due_on: body.dueOn || node.plannedEnd || undefined,
@@ -179,7 +179,7 @@ export async function POST(request: Request) {
       if (!body.taskGid) return jsonError("Не вказано GID задачі Asana", 400);
       const data: Record<string, unknown> = {};
       // Existing Asana task names are changed only by the explicit rename action.
-      if (node.asana.rules.description === "portal") data.notes = body.description;
+      if (node.asana.rules.description === "portal") data.html_notes = portalTaskDescriptionForAsana(state.nodes, node, body.description);
       if (node.asana.rules.dates === "portal") {
         data.due_on = body.dueOn || null;
         data.start_on = body.startOn && body.dueOn ? body.startOn : null;
