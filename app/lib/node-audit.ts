@@ -1,7 +1,7 @@
 import type { AuditEntry, PortalUser, WorkNode } from "../types";
 
 const labels: Record<string, string> = {
-  parentId: "Батьківський рівень", code: "Код", kind: "Рівень", title: "Назва",
+  parentId: "Батьківський рівень", linkedParentIds: "Додатково відображати у", code: "Код", kind: "Рівень", title: "Назва",
   description: "Опис", result: "Готовий результат", nonResult: "Що не є результатом",
   acceptanceCriteria: "Критерій приймання", assigneeId: "Виконавець", acceptorId: "Ініціатор",
   participantIds: "Учасники", lifecycle: "Статус", lifecycleOverride: "Статус (ручне правило)",
@@ -20,7 +20,7 @@ const statuses: Record<string, string> = { draft: "Чернетка", idea: "І�
 function format(value: unknown, key: string, users: PortalUser[], nodes: WorkNode[]): string {
   if (value === undefined || value === null || value === "") return "Не вказано";
   if (typeof value === "boolean") return value ? "Так" : "Ні";
-  if (Array.isArray(value)) return value.length ? value.map((item) => format(item, key === "participantIds" ? "assigneeId" : key, users, nodes)).join("; ") : "Немає";
+  if (Array.isArray(value)) return value.length ? value.map((item) => format(item, key === "participantIds" ? "assigneeId" : key === "linkedParentIds" ? "parentId" : key, users, nodes)).join("; ") : "Немає";
   if (typeof value === "object") return JSON.stringify(value);
   if (["assigneeId", "acceptorId", "deletedById"].includes(key)) return users.find((user) => user.id === value)?.name || String(value);
   if (key === "parentId") { const node = nodes.find((item) => item.id === value); return node ? `${node.code} · ${node.title}` : String(value); }

@@ -49,6 +49,14 @@ export function changeTrash(current: PortalState, user: SessionUser, rootId: str
     }
     node.updatedAt = at;
   }
+  // Removing a reporting location cannot leave dangling links on live cards.
+  if (action === "delete") for (const node of next.nodes) {
+    const linked = node.linkedParentIds || [];
+    if (linked.some((id) => ids.has(id))) {
+      node.linkedParentIds = linked.filter((id) => !ids.has(id));
+      node.updatedAt = at;
+    }
+  }
   recalculateHierarchy(next);
   const changed = next.nodes.filter((node) => JSON.stringify(node) !== JSON.stringify(current.nodes.find((item) => item.id === node.id)));
   next.audit = [...changed.map((node) => ({

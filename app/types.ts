@@ -90,6 +90,8 @@ export type Recurrence = {
 export type WorkNode = {
   id: string;
   parentId: string | null;
+  /** Additional reporting parents; the primary parent determines the stable code. */
+  linkedParentIds?: string[];
   code: string;
   kind: NodeKind;
   title: string;

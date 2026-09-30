@@ -14,6 +14,7 @@ const ui = await read("app/PortalApp.tsx");
 const source = [
   'const trashFields = ["deletedAt", "deletedById", "deletedBatchId", "trashPreviousArchived"];',
   noImports(await read("app/lib/forecast-deadline.ts")),
+  noImports(await read("app/lib/reporting-links.ts")),
   noImports(await read("app/lib/hierarchy.ts")),
   noImports(await read("app/lib/responsibility.ts")),
   noImports(await read("app/lib/node-audit.ts")),
@@ -65,6 +66,18 @@ test("every active portal user can read private and archived cards without gaini
   assert.equal(rules.workFilterForUser(state.nodes[0], initiator), "acceptance");
   assert.equal(rules.workFilterForUser(state.nodes[0], executor), "action");
   assert.equal(rules.hasWorkAccessForUser(state.nodes[0], legacy), false);
+});
+
+test("server accepts a valid reporting link but rejects forged or circular locations", async () => {
+  const state = fixture();
+  state.nodes.push(makeNode("d1", { kind: "cycle", parentId: null, acceptorId: initiator.id }));
+  state.nodes.push(makeNode("d2", { kind: "cycle", parentId: null, acceptorId: initiator.id }));
+  state.nodes[0].parentId = "d1";
+  assert.equal((await post(state, initiator, (next) => { next.nodes[0].linkedParentIds = ["d2"]; })).status, 200);
+  assert.deepEqual(rules.savedState().nodes[0].linkedParentIds, ["d2"]);
+  assert.equal((await post(state, initiator, (next) => { next.nodes[0].linkedParentIds = ["d1"]; })).status, 400);
+  assert.equal((await post(state, initiator, (next) => { next.nodes[0].linkedParentIds = ["missing"]; })).status, 400);
+  assert.equal((await post(state, executor, (next) => { next.nodes[0].linkedParentIds = ["d2"]; })).status, 403);
 });
 
 test("server rejects coordinator card and approval writes but allows communication and own notification reads", async () => {

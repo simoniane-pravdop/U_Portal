@@ -14,7 +14,8 @@ async function load(path, dependencies = {}) {
   return mod.exports;
 }
 const forecast = await load("../app/lib/forecast-deadline.ts");
-const hierarchy = await load("../app/lib/hierarchy.ts", { "./forecast-deadline": forecast });
+const reporting = await load("../app/lib/reporting-links.ts");
+const hierarchy = await load("../app/lib/hierarchy.ts", { "./forecast-deadline": forecast, "./reporting-links": reporting });
 const audit = await load("../app/lib/node-audit.ts");
 const trash = await load("../app/lib/trash.ts", { "./hierarchy": hierarchy, "./node-audit": audit });
 const seed = JSON.parse(await readFile(new URL("../app/data/seed.json", import.meta.url), "utf8"));

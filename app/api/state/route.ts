@@ -5,6 +5,7 @@ import { nodeAuditChanges } from "../../lib/node-audit";
 import { flushAsanaOutbox } from "../../lib/asana-outbox";
 import { trashFields } from "../../lib/trash";
 import { portalHref } from "../../lib/portal-routes";
+import { reportingLinkError } from "../../lib/reporting-links";
 import type { PortalNotification, PortalState, SessionUser } from "../../types";
 
 export const dynamic = "force-dynamic";
@@ -102,6 +103,10 @@ export async function POST(request: Request) {
   if (touchesRemoved) return jsonError("Пов’язані дані картки в кошику не можна змінювати", 409);
   delete (body.state as PortalState & { trashNodes?: unknown }).trashNodes;
   body.state = mergeHiddenState(current, body.state, user);
+  for (const node of body.state.nodes) {
+    const linkError = reportingLinkError(body.state.nodes, node, current.nodes.find((item) => item.id === node.id));
+    if (linkError) return jsonError(linkError, 400);
+  }
   const approvalError = approvalChangeError(current, body.state, user);
   if (approvalError) return jsonError(approvalError, 403);
   routePendingRequests(body.state);
@@ -127,6 +132,7 @@ export async function POST(request: Request) {
     if (!after) return jsonError("Записи не видаляються фізично — використайте контрольоване вилучення з дерева", 400);
     if ((!before || before.code !== after.code) && body.state.nodes.some((node) => node.id !== id && node.code.trim().toLowerCase() === after.code.trim().toLowerCase())) return jsonError("Код уже використовується, зокрема карткою в кошику. Оберіть інший код.", 409);
     if (before && before.acceptorId !== after.acceptorId && !mayEdit(user, before.acceptorId)) return jsonError("Змінити ініціатора може лише поточний ініціатор або керівник з правом редагування.", 403);
+    if (before && JSON.stringify(before.linkedParentIds || []) !== JSON.stringify(after.linkedParentIds || []) && !mayEdit(user, before.acceptorId)) return jsonError("Додаткові зв’язки може змінювати лише ініціатор або уповноважений керівник.", 403);
     const mayCreate = !before && ["owner", "admin", "goal_owner", "cycle_owner"].includes(user.role);
     const resolvesDecision = current.decisions.some((decision) => decision.nodeId === id && decision.decisionOwnerId === user.id);
     const managesBlocker = current.blockers.some((blocker) => blocker.nodeId === id && (blocker.escalationToId === user.id || blocker.ownerId === user.id));

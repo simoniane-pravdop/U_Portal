@@ -6,11 +6,12 @@ import ts from "typescript";
 test("coordination flags open cycles and subcycles without active descendant tasks", async () => {
   const source = await readFile(new URL("../app/PortalApp.tsx", import.meta.url), "utf8");
   const rules = await readFile(new URL("../app/coordination-rules.ts", import.meta.url), "utf8");
+  const reporting = await readFile(new URL("../app/lib/reporting-links.ts", import.meta.url), "utf8");
   const parsed = ts.createSourceFile("PortalApp.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const functions = parsed.statements.filter((statement) => ts.isFunctionDeclaration(statement)
     && ["coordinationAttentionReasons", "descendants", "lacksRecentReport"].includes(statement.name?.text));
   assert.equal(functions.length, 3);
-  const { outputText } = ts.transpileModule(`${rules}\n${functions.map((fn) => fn.getText(parsed)).join("\n")}\nexport { coordinationAttentionReasons };`, {
+  const { outputText } = ts.transpileModule(`${rules}\n${reporting}\n${functions.map((fn) => fn.getText(parsed)).join("\n")}\nexport { coordinationAttentionReasons };`, {
     compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
   });
   const { coordinationAttentionReasons } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
@@ -314,7 +315,7 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /item\.assigneeId === ownerId/);
   assert.match(source, /node\.assigneeId === ownerId/);
   assert.match(source, /Усі виконавці/);
-  assert.match(source, /missingActiveTasksReason\(node, descendants\(payload.nodes.filter/);
+  assert.match(source, /missingActiveTasksReason\(node, reportingDescendants\(payload.nodes, node.id\)\)/);
   assert.match(source, /три останні звіти/);
   assert.match(source, /slice\(0, 3\)/);
   assert.match(source, /Показати звіти/);

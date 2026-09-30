@@ -1397,6 +1397,18 @@ small { font-size: 11px !important; line-height: 1.35; }
 .project-results-list article a { display: block; color: var(--navy-800); font-size: 13px; font-weight: 750; line-height: 1.4; }
 .project-results-list article small { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; }
 .project-results-list article p { margin: 6px 0 0; overflow-wrap: anywhere; font-size: 12px; line-height: 1.45; }
+.reporting-target-picker { display: grid; gap: 6px; max-height: 210px; overflow-y: auto; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: #f7f9fb; }
+.reporting-target-picker label { display: flex; align-items: flex-start; gap: 9px; padding: 8px; border: 1px solid var(--line-soft); border-radius: 7px; background: #fff; cursor: pointer; }
+.reporting-target-picker input { width: auto; flex: none; margin-top: 3px; }
+.reporting-target-picker span { color: var(--ink); font-size: 13px; line-height: 1.35; }
+.reporting-target-picker small { display: block; color: var(--muted); font-size: 11px; }
+.reporting-target-picker p { margin: 4px; color: var(--muted); font-size: 12px; }
+.linked-task-label { display: block; margin-top: 2px; font-size: 10px; font-weight: 650; opacity: .85; }
+.reporting-location-note { margin: 8px 12px 14px; padding: 11px; border: 1px solid var(--line); border-radius: 8px; background: #f7f9fb; }
+.reporting-location-note > strong { display: block; margin-bottom: 6px; font-size: 13px; }
+.reporting-location-note > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.reporting-location-note a { padding: 5px 8px; border-radius: 6px; color: var(--navy-800); background: #e6eff7; font-size: 12px; font-weight: 700; }
+.reporting-location-note small { display: block; margin-top: 7px; color: var(--muted); font-size: 11px; }
 .audit-changes { grid-column: 2; display: grid; gap: 7px; margin-top: 5px; }
 .audit-changes > div { display: grid; grid-template-columns: minmax(125px, .35fr) minmax(0, 1fr); gap: 8px; padding: 7px 9px; border-radius: 7px; background: #f6f9fc; }
 .audit-changes b { color: var(--navy-800); font-size: 12px; }

@@ -1,5 +1,6 @@
 import type { PortalState, WorkNode } from "../types";
 import { plannedEndForForecast } from "./forecast-deadline";
+import { reportingChildren, reportingDescendants } from "./reporting-links";
 
 export function recalculateHierarchy(state: PortalState) {
   const active = state.nodes.filter((node) => !node.archived);
@@ -18,7 +19,13 @@ export function recalculateHierarchy(state: PortalState) {
   };
   const parents = active.filter((node) => node.kind !== "task").sort((a, b) => depth(b) - depth(a));
   for (const parent of parents) {
-    const children = active.filter((node) => node.parentId === parent.id);
+    const branch = reportingDescendants(active, parent.id).filter((node) => node.id !== parent.id);
+    // Where a task is visible through several paths, use unique leaf tasks for the
+    // rollup. Otherwise keep the existing immediate-child weighting unchanged.
+    const linkedTasks = branch.filter((node) => node.kind === "task");
+    const children = linkedTasks.length && branch.some((node) => node.linkedParentIds?.length)
+      ? linkedTasks
+      : reportingChildren(active, parent.id);
     const before = JSON.stringify({ progress: parent.progress, health: parent.health, decisionRequired: parent.decisionRequired, lifecycle: parent.lifecycle, forecastEnd: parent.forecastEnd, plannedEnd: parent.plannedEnd });
     const calculatedHealth = state.blockers.some((item) => item.nodeId === parent.id && item.status === "open") ? "blocked" : "normal";
     parent.health = parent.healthOverride || calculatedHealth;
