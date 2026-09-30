@@ -4,16 +4,16 @@ import { currentUser, database, jsonError, loadState, mayEdit } from "../../../l
 import type { PortalState, WorkUpdate } from "../../../types";
 
 type SyncBody = {
-  action: "read" | "create" | "update" | "rename";
+  action: "read" | "create" | "update" | "rename" | "move";
   nodeId: string;
   taskGid?: string;
   projectGid?: string;
   workspaceGid?: string;
   title?: string;
   description?: string;
-  startOn?: string;
   dueOn?: string;
   completed?: boolean;
+  expectedParentGid?: string;
 };
 
 type AsanaTaskEnvelope = {
@@ -173,7 +173,6 @@ export async function POST(request: Request) {
             name: primaryAsanaTitle(node),
             html_notes: portalTaskDescriptionForAsana(state.nodes, node, body.description),
             ...(!parent ? body.projectGid ? { projects: [body.projectGid] } : { workspace: body.workspaceGid } : {}),
-            start_on: body.startOn && (body.dueOn || node.plannedEnd) ? body.startOn : undefined,
             due_on: body.dueOn || node.plannedEnd || undefined,
             assignee: connection?.asana_user_gid || undefined,
           },
@@ -190,6 +189,21 @@ export async function POST(request: Request) {
           projectWarning = error instanceof Error ? `Підзадачу створено, але не додано до проєкту Asana: ${error.message}` : "Підзадачу створено, але не додано до проєкту Asana";
         }
       }
+    } else if (body.action === "move") {
+      if (!body.taskGid || body.taskGid !== node.asana.taskGid) return jsonError("Головну задачу Asana не визначено", 400);
+      const parent = asanaParentNode(state.nodes, node);
+      if (!parent?.asana.taskGid) return jsonError("Спочатку прив’яжіть батьківську задачу Asana", 409);
+      if (parent.asana.taskGid === body.taskGid) return jsonError("Задача не може бути власною батьківською задачею", 400);
+      const currentTask = await asanaRequest(user.id, `/tasks/${encodeURIComponent(body.taskGid)}?opt_fields=workspace.gid,parent.gid`) as AsanaTaskEnvelope;
+      const parentTask = await asanaRequest(user.id, `/tasks/${encodeURIComponent(parent.asana.taskGid)}?opt_fields=workspace.gid`) as AsanaTaskEnvelope;
+      const currentParentGid = currentTask.data?.parent?.gid || "";
+      if (currentParentGid !== (body.expectedParentGid || "")) return jsonError("Батьківську задачу в Asana вже змінено. Оновіть картку й перевірте її знову", 409);
+      if (!currentTask.data?.workspace?.gid || currentTask.data.workspace.gid !== parentTask.data?.workspace?.gid) return jsonError("Перенесення між різними робочими просторами Asana неможливе", 409);
+      if (currentParentGid === parent.asana.taskGid) return jsonError("Задача вже знаходиться під потрібною батьківською задачею", 409);
+      createdParentGid = parent.asana.taskGid;
+      result = await asanaRequest(user.id, `/tasks/${encodeURIComponent(body.taskGid)}/setParent?opt_fields=gid,name,completed,due_on,assignee.name,permalink_url,modified_at,workspace.gid,workspace.name,parent.gid,projects.gid,projects.name`, {
+        method: "POST", body: JSON.stringify({ data: { parent: parent.asana.taskGid } }),
+      }) as AsanaTaskEnvelope;
     } else if (body.action === "rename") {
       if (!body.taskGid || body.taskGid !== node.asana.taskGid) return jsonError("Головну задачу Asana не визначено", 400);
       result = await asanaRequest(user.id, `/tasks/${encodeURIComponent(body.taskGid)}?opt_fields=gid,name,completed,due_on,assignee.name,permalink_url,modified_at,workspace.gid,workspace.name,parent.gid,projects.gid,projects.name`, {
@@ -203,7 +217,6 @@ export async function POST(request: Request) {
       if (node.asana.rules.description === "portal") data.html_notes = portalTaskDescriptionForAsana(state.nodes, node, body.description);
       if (node.asana.rules.dates === "portal") {
         data.due_on = body.dueOn || null;
-        data.start_on = body.startOn && body.dueOn ? body.startOn : null;
       }
       if (node.asana.rules.status === "portal") data.completed = body.completed;
       if (!Object.keys(data).length) return jsonError("Жодне поле не визначено для передання з порталу", 400);

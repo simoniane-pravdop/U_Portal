@@ -7,10 +7,11 @@ const app = await readFile(new URL("../app/PortalApp.tsx", import.meta.url), "ut
 test("the control-place add button creates another row even when the first one is empty", () => {
   assert.match(app, /onClick=\{\(\) => update\("controlPlace", `\$\{node\.controlPlace\}\\n`\)\}/);
   assert.match(app, /aria-label="Додати ще одне контрольне місце">\+ місце/);
+  assert.match(app, /aria-label=\{`Видалити додаткове контрольне місце \$\{index\}`\}>− місце/);
 });
 
 test("directions, projects and tasks expose hierarchical Asana creation", () => {
-  assert.match(app, /node\.kind !== "goal" && <button onClick=\{saveAndCreateAsana\}>\{node\.asana\.taskGid \? "Зберегти → відкрити Asana" : "Зберегти → створити в Asana"\}<\/button>/);
+  assert.match(app, /node\.kind !== "goal" && <button onClick=\{saveAndCreateAsana\}>\{node\.asana\.taskGid \? "Зберегти й відкрити зв’язок Asana" : "Зберегти й перейти до створення в Asana"\}<\/button>/);
   assert.match(app, /if \(openAsanaAfterSave\) openNodeInWork\(updated, "asana"\)/);
   assert.match(app, /selected\.kind !== "goal" && <button className="secondary" onClick=\{\(\) => openWork\(selected, "asana"\)\}>/);
   assert.match(app, /\["subcycle", "cycle"\]\.includes\(current\.kind\) && <AsanaSyncPanel/);

@@ -50,6 +50,21 @@ test("create and portal-controlled update send rich descriptions with actual anc
   }
 });
 
+test("free-plan Asana writes keep the due date but never send start_on", async () => {
+  for (const action of ["create", "update"]) {
+    const state = fixture();
+    state.nodes[2].plannedStart = "2026-09-30";
+    state.nodes[2].asana.rules.dates = "portal";
+    if (action === "create") state.nodes[2].asana.taskGid = "";
+    api.setup(state, admin);
+    const response = await api.POST(new Request("https://portal.example/api/asana/sync", { method: "POST", body: JSON.stringify({ action, nodeId: "task", taskGid: "456789012", workspaceGid: "12345678", startOn: "2026-09-30", dueOn: "2026-10-02" }) }));
+    assert.equal(response.status, 200);
+    const write = api.sentRequests().find((request) => request.method === (action === "create" ? "POST" : "PUT"));
+    assert.equal(write.data.due_on, "2026-10-02");
+    assert.equal("start_on" in write.data, false);
+  }
+});
+
 test("manual and Asana-controlled descriptions are not overwritten by a portal update", async () => {
   for (const rule of ["manual", "asana"]) {
     const state = fixture(rule);
@@ -113,4 +128,19 @@ test("creation waits for the direct parent and never silently makes a root task"
   assert.equal(response.status, 409);
   assert.match((await response.json()).error, /Спочатку створіть або прив’яжіть/);
   assert.equal(api.sentRequests().length, 0);
+});
+
+test("moving a linked task under its portal parent requires matching current Asana parent", async () => {
+  api.setup(fixture(), admin);
+  let response = await api.POST(new Request("https://portal.example/api/asana/sync", { method: "POST", body: JSON.stringify({ action: "move", nodeId: "task", taskGid: "456789012", expectedParentGid: "unexpected" }) }));
+  assert.equal(response.status, 409);
+  assert.equal(api.sentRequests().some((request) => request.path.includes("/setParent")), false);
+
+  api.setup(fixture(), admin);
+  response = await api.POST(new Request("https://portal.example/api/asana/sync", { method: "POST", body: JSON.stringify({ action: "move", nodeId: "task", taskGid: "456789012", expectedParentGid: "" }) }));
+  assert.equal(response.status, 200);
+  const moved = api.sentRequests().find((request) => request.path.includes("/setParent"));
+  assert.equal(moved.method, "POST");
+  assert.deepEqual(moved.data, { parent: "987654321" });
+  assert.equal((await response.json()).parentGid, "987654321");
 });
