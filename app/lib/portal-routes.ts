@@ -10,7 +10,7 @@ export const portalPaths = {
 } as const;
 
 export type PortalView = keyof typeof portalPaths;
-export type PortalFocus = "blocker" | "decision" | "acceptance" | "discussion" | "reports" | null;
+export type PortalFocus = "blocker" | "decision" | "acceptance" | "discussion" | "reports" | "asana" | null;
 
 export function portalViewForPath(pathname: string): PortalView | undefined {
   const path = pathname.replace(/\/$/, "");
@@ -23,7 +23,7 @@ export function readPortalRoute(url: URL) {
     || (url.pathname === "/" && legacyView && Object.hasOwn(portalPaths, legacyView) ? legacyView as PortalView : "dashboard");
   const nodeId = ["my", "tree"].includes(view) ? url.searchParams.get("node") || "" : "";
   const requestedFocus = url.searchParams.get("focus");
-  const focus = view === "my" && ["blocker", "decision", "acceptance", "discussion", "reports"].includes(requestedFocus || "")
+  const focus = view === "my" && ["blocker", "decision", "acceptance", "discussion", "reports", "asana"].includes(requestedFocus || "")
     ? requestedFocus as PortalFocus : null;
   return { view, nodeId, focus };
 }

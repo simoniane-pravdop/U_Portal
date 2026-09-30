@@ -33,7 +33,7 @@ test("all old query links remain readable and canonicalize without duplicate his
 
 test("card identifiers and action targets survive encoding, reload and history parsing", () => {
   const id = "node/1 &2";
-  for (const focus of ["blocker", "decision", "acceptance", "discussion", "reports"]) {
+  for (const focus of ["blocker", "decision", "acceptance", "discussion", "reports", "asana"]) {
     const href = portalHref("my", id, focus);
     const url = new URL(href, "https://portal.test");
     assert.equal(url.pathname, "/moia-robota");
