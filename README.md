@@ -5,7 +5,7 @@
 Порядок внесення змін, перевірок і розміщення зафіксовано в
 [`DEVELOPMENT_WORKFLOW.md`](./DEVELOPMENT_WORKFLOW.md).
 
-Тестова версія: [pravdop-management-portal.simonian-e-be8.workers.dev](https://pravdop-management-portal.simonian-e-be8.workers.dev/).
+Основний портал: [up.automatizer.online](https://up.automatizer.online/). Колишню тестову версію Cloudflare видалено 2026-09-30.
 Кожна перевірена зміна в гілці `main` автоматично розгортається через GitHub Actions.
 
 ## Що реалізовано
