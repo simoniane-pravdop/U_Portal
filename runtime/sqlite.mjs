@@ -28,6 +28,14 @@ export function openPortalDatabase(path) {
   }
   return {
     prepare: statement,
+    integrationSetting(name) {
+      try {
+        return connection.prepare("SELECT encrypted_value FROM portal_integration_settings WHERE name = ?").get(name)?.encrypted_value || null;
+      } catch (error) {
+        if (String(error).includes("no such table")) return null;
+        throw error;
+      }
+    },
     async batch(statements) {
       connection.exec("BEGIN IMMEDIATE");
       try {

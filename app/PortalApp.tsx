@@ -1040,7 +1040,7 @@ export function PortalApp() {
           {view === "my" && <MyWork key={`${selected?.id || "empty"}-${workEntryFilter}-${workEntryFocus || "top"}`} payload={payload} selected={selected} selectedId={selectedId} setSelectedId={setSelectedId} initialFilter={workEntryFilter} focusTarget={workEntryFocus} userById={userById} canManage={canManage} saveWorkUpdate={saveWorkUpdate} resolveAcceptance={resolveAcceptance} completeNode={completeNode} openEdit={openEdit} openDuplicate={openDuplicate} copyNodeLink={copyNodeLink} trashAction={trashAction} setModal={setModal} asanaStatus={asanaStatus} mutate={mutate} setNotice={setNotice} openTree={(id) => { setSelectedId(id); setView("tree"); }} />}
           {view === "coordination" && <CoordinationView payload={payload} userById={userById} open={(node) => { setSelectedId(node.id); setModal("coordination"); }} />}
           {view === "ideas" && <IdeasView user={payload.currentUser} users={payload.users} canCreateNode={canManage} notify={setNotice} createNode={(idea) => { setNodeErrors({}); setDraftNode({ ...blankNode([...payload.nodes, ...(payload.trashNodes || [])], undefined, payload.currentUser, "goal"), title: idea.title, description: idea.description }); setModal("node"); }} />}
-          {view === "settings" && <SettingsView payload={payload} asanaStatus={asanaStatus} telegramStatus={telegramStatus} setTelegramStatus={setTelegramStatus} setNotice={setNotice} reload={load} trashAction={trashAction} />}
+          {view === "settings" && <SettingsView payload={payload} asanaStatus={asanaStatus} setAsanaStatus={setAsanaStatus} telegramStatus={telegramStatus} setTelegramStatus={setTelegramStatus} setNotice={setNotice} reload={load} trashAction={trashAction} />}
         </div>
       </section>
 
@@ -1915,7 +1915,7 @@ function TelegramPanel({ payload, status, setStatus, notify }: { payload: Portal
     finally { setBusy(false); }
   };
   const canSetup = ["owner", "admin"].includes(payload.currentUser.role);
-  return <section className="panel telegram-panel"><div className="integration-brand"><div className="telegram-logo">✈</div><div><span>Telegram</span><h2>{status?.connected ? "Особистий чат підключено" : status?.configured ? "Бот готовий до прив’язки" : "Потрібне налаштування бота"}</h2><p>{status?.configured ? `Бот ${status.bot?.username ? `@${status.bot.username}` : "налаштований"} надсилає строки, блокери, рішення та запити приймання; контрольні дані залишаються в порталі.` : "Додайте токен від @BotFather і секрет webhook до середовища Cloudflare."}</p></div><span className={`connection-state ${status?.connected ? "connected" : ""}`}>{status?.connected ? "Підключено" : "Не підключено"}</span></div>{status?.webhook?.error && <p className="integration-error">Webhook: {status.webhook.error}</p>}<div className="telegram-actions">{status?.configured && canSetup && !status.webhook?.active && <button disabled={busy} onClick={() => void action("/api/telegram/setup", {}, "Telegram-webhook увімкнено")}>Увімкнути webhook</button>}{status?.configured && !status.connected && <button className="primary" disabled={busy || !status.webhook?.active} onClick={() => void action("/api/telegram/link", { action: "create_code" }, "Персональне посилання створено")}>Підключити Telegram</button>}{status?.connected && <><button disabled={busy} onClick={() => void action("/api/telegram/link", { action: "test" }, "Тестове повідомлення надіслано")}>Надіслати тест</button><button disabled={busy} onClick={() => void refresh().then(() => notify("Стан Telegram оновлено")).catch((cause) => notify(cause instanceof Error ? cause.message : "Помилка Telegram", "error"))}>Перевірити зв’язок</button><button className="danger" disabled={busy} onClick={() => void action("/api/telegram/link", { action: "unlink" }, "Telegram від’єднано")}>Від’єднати</button></>}</div>{deepLink && !status?.connected && <div className="telegram-link-box"><strong>Посилання діє 10 хвилин</strong><span>Відкрийте його зі свого Telegram і натисніть Start.</span><a href={deepLink} target="_blank" rel="noreferrer">Відкрити Telegram ↗</a></div>}</section>;
+  return <section className="panel telegram-panel"><div className="integration-brand"><div className="telegram-logo">✈</div><div><span>Telegram</span><h2>{status?.connected ? "Особистий чат підключено" : status?.configured ? "Бот готовий до прив’язки" : "Потрібне налаштування бота"}</h2><p>{status?.configured ? `Бот ${status.bot?.username ? `@${status.bot.username}` : "налаштований"} надсилає строки, блокери, рішення та запити приймання; контрольні дані залишаються в порталі.` : "Адміністратор може додати токен бота нижче в налаштуваннях інтеграцій."}</p></div><span className={`connection-state ${status?.connected ? "connected" : ""}`}>{status?.connected ? "Підключено" : "Не підключено"}</span></div>{status?.webhook?.error && <p className="integration-error">Webhook: {status.webhook.error}</p>}<div className="telegram-actions">{status?.configured && canSetup && !status.webhook?.active && <button disabled={busy} onClick={() => void action("/api/telegram/setup", {}, "Telegram-webhook увімкнено")}>Увімкнути webhook</button>}{status?.configured && !status.connected && <button className="primary" disabled={busy || !status.webhook?.active} onClick={() => void action("/api/telegram/link", { action: "create_code" }, "Персональне посилання створено")}>Підключити Telegram</button>}{status?.connected && <><button disabled={busy} onClick={() => void action("/api/telegram/link", { action: "test" }, "Тестове повідомлення надіслано")}>Надіслати тест</button><button disabled={busy} onClick={() => void refresh().then(() => notify("Стан Telegram оновлено")).catch((cause) => notify(cause instanceof Error ? cause.message : "Помилка Telegram", "error"))}>Перевірити зв’язок</button><button className="danger" disabled={busy} onClick={() => void action("/api/telegram/link", { action: "unlink" }, "Telegram від’єднано")}>Від’єднати</button></>}</div>{deepLink && !status?.connected && <div className="telegram-link-box"><strong>Посилання діє 10 хвилин</strong><span>Відкрийте його зі свого Telegram і натисніть Start.</span><a href={deepLink} target="_blank" rel="noreferrer">Відкрити Telegram ↗</a></div>}</section>;
 }
 
 function AsanaAccountPanel({ payload, status, notify }: { payload: PortalPayload; status: { configured: boolean; connected: boolean; connection?: Record<string, string> } | null; notify: Notify }) {
@@ -1934,12 +1934,70 @@ function AsanaAccountPanel({ payload, status, notify }: { payload: PortalPayload
   return <section className="panel integration-main"><div className="integration-brand"><div className="asana-logo">A</div><div><span>Asana</span><h2>{status?.connected ? "Особистий акаунт підключено" : "Підключення очікується"}</h2><p>{status?.configured ? "Тут керується лише особистий акаунт. Конкретні задачі прив’язуються в «Моїй роботі»." : "Потрібні ключі Asana OAuth-застосунку для цього середовища."}</p></div><span className={`connection-state ${status?.connected ? "connected" : ""}`}>{status?.connected ? "Підключено" : "Не підключено"}</span></div>{status?.connected ? <div className="connected-user"><div><strong>{String(status.connection?.asana_user_name || payload.currentUser.name)}</strong><small>Зміни в Asana виконуватимуться від цього користувача.</small></div><div className="asana-account-actions"><a href="/api/asana/start">Перепідключити акаунт</a><button className="danger" disabled={busy} onClick={() => void disconnect()}>{busy ? "Відключаємо…" : "Відключити акаунт"}</button></div></div> : <a className={`button-link ${!status?.configured ? "disabled" : ""}`} href={status?.configured ? "/api/asana/start" : undefined}>Підключити мій Asana-акаунт</a>}</section>;
 }
 
-function SettingsView({ payload, asanaStatus, telegramStatus, setTelegramStatus, setNotice, reload, trashAction }: { payload: PortalPayload; asanaStatus: { configured: boolean; connected: boolean; connection?: Record<string, string> } | null; telegramStatus: TelegramStatus | null; setTelegramStatus: (status: TelegramStatus) => void; setNotice: Notify; reload: () => Promise<PortalPayload>; trashAction: TrashAction }) {
+type IntegrationSetup = { editable: boolean; asana: { clientId: string; secretSet: boolean; callbackUrl: string }; telegram: { tokenSet: boolean; webhookSecretSet: boolean; webhookUrl: string } };
+
+function IntegrationSetupPanel({ notify, refresh }: { notify: Notify; refresh: () => void }) {
+  const [config, setConfig] = useState<IntegrationSetup | null>(null);
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const [botToken, setBotToken] = useState("");
+  const [busy, setBusy] = useState<"asana" | "telegram" | "">("");
+  const load = async () => {
+    const response = await fetch("/api/admin/integrations", { cache: "no-store" });
+    const result = await response.json() as IntegrationSetup & { error?: string };
+    if (!response.ok) throw new Error(result.error || "Не вдалося прочитати налаштування інтеграцій");
+    setConfig(result);
+    setClientId(result.asana.clientId);
+  };
+  useEffect(() => {
+    void fetch("/api/admin/integrations", { cache: "no-store" }).then(async (response) => {
+      const result = await response.json() as IntegrationSetup & { error?: string };
+      if (!response.ok) throw new Error(result.error || "Не вдалося прочитати налаштування інтеграцій");
+      return result;
+    }).then((result) => { setConfig(result); setClientId(result.asana.clientId); }).catch((error) => notify(error.message, "error"));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const save = async (provider: "asana" | "telegram") => {
+    setBusy(provider);
+    try {
+      const response = await fetch("/api/admin/integrations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(provider === "asana" ? { provider, clientId, clientSecret } : { provider, botToken }) });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || "Не вдалося зберегти інтеграцію");
+      setClientSecret("");
+      setBotToken("");
+      await load();
+      refresh();
+      notify(provider === "asana" ? "Ключі Asana збережено. Тепер кожен учасник може підключити власний акаунт." : "Токен Telegram-бота збережено.");
+    } catch (error) { notify(error instanceof Error ? error.message : "Помилка інтеграції", "error"); }
+    finally { setBusy(""); }
+  };
+  return <section className="panel integration-admin-panel">
+    <div className="panel-head"><div><span>Лише адміністратори</span><h2>Налаштування інтеграцій порталу</h2></div></div>
+    <p>Ці ключі вводяться один раз для порталу. Підключення власного акаунта Asana кожен користувач підтверджує окремо вище.</p>
+    {!config ? <p>Завантаження налаштувань…</p> : !config.editable ? <p role="alert">На сервері не налаштований ключ захисту інтеграцій. Зверніться до адміністратора сервера.</p> : <div className="integration-admin-grid">
+      <div className="integration-admin-card"><h3>Asana</h3>
+        <label>Адреса повернення для застосунку<input readOnly value={config.asana.callbackUrl} onFocus={(event) => event.currentTarget.select()} /></label>
+        <small>Додайте цю адресу в <a href="https://app.asana.com/0/my-apps" target="_blank" rel="noreferrer">налаштуваннях застосунку Asana</a>. Дозволи: задачі, коментарі, користувачі, проєкти й позначки.</small>
+        <label>Ідентифікатор застосунку<input inputMode="numeric" value={clientId} onChange={(event) => setClientId(event.target.value)} placeholder="Числовий ідентифікатор" /></label>
+        <label>Секрет застосунку <span>{config.asana.secretSet ? "збережено — поле можна залишити порожнім" : "ще не задано"}</span><input type="password" autoComplete="off" value={clientSecret} onChange={(event) => setClientSecret(event.target.value)} placeholder={config.asana.secretSet ? "Новий секрет лише для заміни" : "Вставте секрет Asana"} /></label>
+        <button className="primary" disabled={Boolean(busy) || !clientId.trim() || (!clientSecret && !config.asana.secretSet)} onClick={() => void save("asana")}>{busy === "asana" ? "Збереження…" : "Зберегти Asana"}</button>
+      </div>
+      <div className="integration-admin-card"><h3>Telegram</h3>
+        <label>Адреса отримання повідомлень<input readOnly value={config.telegram.webhookUrl} onFocus={(event) => event.currentTarget.select()} /></label>
+        <small>Токен створюється в BotFather. Після збереження бот зможе приймати прив’язування акаунтів і надсилати повідомлення.</small>
+        <label>Токен бота <span>{config.telegram.tokenSet ? "збережено — поле можна залишити порожнім" : "ще не задано"}</span><input type="password" autoComplete="off" value={botToken} onChange={(event) => setBotToken(event.target.value)} placeholder="Токен від BotFather" /></label>
+        <button className="primary" disabled={Boolean(busy) || !botToken.trim()} onClick={() => void save("telegram")}>{busy === "telegram" ? "Збереження…" : "Зберегти Telegram"}</button>
+      </div>
+    </div>}
+  </section>;
+}
+
+function SettingsView({ payload, asanaStatus, setAsanaStatus, telegramStatus, setTelegramStatus, setNotice, reload, trashAction }: { payload: PortalPayload; asanaStatus: { configured: boolean; connected: boolean; connection?: Record<string, string> } | null; setAsanaStatus: (status: { configured: boolean; connected: boolean; connection?: Record<string, string> }) => void; telegramStatus: TelegramStatus | null; setTelegramStatus: (status: TelegramStatus) => void; setNotice: Notify; reload: () => Promise<PortalPayload>; trashAction: TrashAction }) {
   const administrator = ["owner", "admin"].includes(payload.currentUser.role);
   return <><PageIntro kicker="Налаштування" title="Акаунти, інтеграції та адміністрування" text="Особисті підключення доступні кожному користувачу; бібліотеки, права й журнал змін — лише адміністраторам." />
     <div className="settings-section-head"><div><span>Особисті інтеграції</span><h2>Asana та канали повідомлень</h2></div></div>
     <AsanaAccountPanel payload={payload} status={asanaStatus} notify={setNotice} />
     <TelegramPanel payload={payload} status={telegramStatus} setStatus={setTelegramStatus} notify={setNotice} />
+    {administrator && <IntegrationSetupPanel notify={setNotice} refresh={() => { void fetch("/api/asana/status", { cache: "no-store" }).then((response) => response.json()).then((value) => setAsanaStatus(value as Parameters<typeof setAsanaStatus>[0])); void fetch("/api/telegram/status", { cache: "no-store" }).then((response) => response.json()).then((value) => setTelegramStatus(value as TelegramStatus)); }} />}
     <TrashPanel payload={payload} trashAction={trashAction} />
     {administrator && <><div className="settings-section-head"><span>Бібліотеки</span><h2>Учасники порталу та відповідальні</h2><p>Записи цієї бібліотеки використовуються в усіх полях ініціатора, виконавця, приймання та ескалації.</p></div><UserLibraryEditor payload={payload} reload={reload} setNotice={setNotice} /><div className="settings-layout settings-bottom"><section className="panel"><div className="panel-head"><div><span>Розвиток</span><h2>Повторювані напрями зусиль</h2></div><span className="planned-label">Архітектуру закладено</span></div><p className="panel-copy">Кожна ціль, напрям зусиль, проект або завдання має правило повторення, інтервал і наступну дату. Автоматичне створення екземплярів буде ввімкнено після першого реального повторюваного напряму зусиль.</p><div className="future-box"><strong>Майбутній сценарій</strong><span>Шаблон → дата запуску → новий екземпляр → зв’язок із попереднім періодом → окрема звітність.</span></div></section><section className="panel"><div className="panel-head"><div><span>Довідники наступної черги</span><h2>Кероване розширення</h2></div></div><div className="library-roadmap"><span>Ролі та повноваження</span><span>Типи результатів</span><span>Причини блокерів</span><span>Шаблони координації</span><span>Джерела даних</span></div></section></div><section className="panel audit-panel"><div className="panel-head"><div><span>Контроль</span><h2>Журнал змін</h2></div><span>{payload.audit.length} записів</span></div><div className="audit-list">{payload.audit.slice(0, 30).map((entry) => <div key={entry.id}><time>{new Date(entry.at).toLocaleString("uk-UA")}</time><strong>{entry.action}</strong><span>{entry.by}</span><code>{entry.entityId}</code></div>)}</div></section></>}
   </>;

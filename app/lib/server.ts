@@ -65,6 +65,12 @@ export function cookieHeader(
 }
 
 const schemaStatements = [
+  `CREATE TABLE IF NOT EXISTS portal_integration_settings (
+    name TEXT PRIMARY KEY,
+    encrypted_value TEXT NOT NULL,
+    updated_by TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`,
   `CREATE TABLE IF NOT EXISTS portal_ideas (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,

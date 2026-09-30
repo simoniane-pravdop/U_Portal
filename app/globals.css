@@ -299,6 +299,17 @@ tbody tr { cursor: pointer; }
 tbody tr:hover { background: #f8fafc; }
 
 .integration-main { grid-column: span 1; padding: 18px; }
+.integration-admin-panel { margin-top: 18px; padding: 20px; }
+.integration-admin-panel > p { color: var(--muted); font-size: 14px; line-height: 1.5; }
+.integration-admin-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.integration-admin-card { display: grid; align-content: start; gap: 12px; min-width: 0; padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: #f8fafc; }
+.integration-admin-card h3 { margin: 0; color: var(--navy-900); font-size: 19px; }
+.integration-admin-card label { display: grid; gap: 6px; color: var(--navy-900); font-size: 14px; font-weight: 750; }
+.integration-admin-card label span, .integration-admin-card small { color: var(--muted); font-size: 13px; font-weight: 500; line-height: 1.45; }
+.integration-admin-card input { width: 100%; min-width: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: white; color: var(--navy-900); font-size: 14px; }
+.integration-admin-card input[readonly] { background: #eef3f8; }
+.integration-admin-card button { justify-self: start; min-height: 40px; padding: 9px 16px; }
+@media (max-width: 850px) { .integration-admin-grid { grid-template-columns: 1fr; } }
 .integration-brand { display: flex; align-items: center; gap: 13px; }
 .asana-logo { width: 45px; height: 45px; display: grid; place-items: center; flex: 0 0 auto; color: #fff; background: linear-gradient(135deg, #f06a6a, #9c54d7); border-radius: 12px; font-size: 20px; font-weight: 900; }
 .telegram-logo { width: 45px; height: 45px; display: grid; place-items: center; flex: 0 0 auto; color: #fff; background: linear-gradient(135deg, #36aee2, #1688c4); border-radius: 12px; font-size: 18px; font-weight: 900; }
