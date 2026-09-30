@@ -9,9 +9,12 @@ test("the control-place add button creates another row even when the first one i
   assert.match(app, /aria-label="Додати ще одне контрольне місце">\+ місце/);
 });
 
-test("projects expose a separate Asana task action and work-card panel", () => {
-  assert.match(app, /selected\.kind === "subcycle" && <button className="secondary" onClick=\{\(\) => openWork\(selected, "asana"\)\}>Створити \/ прив’язати задачу Asana/);
-  assert.match(app, /current\.kind === "subcycle" && <AsanaSyncPanel/);
+test("directions, projects and tasks expose hierarchical Asana creation", () => {
+  assert.match(app, /node\.kind !== "goal" && <button onClick=\{saveAndCreateAsana\}>\{node\.asana\.taskGid \? "Зберегти → відкрити Asana" : "Зберегти → створити в Asana"\}<\/button>/);
+  assert.match(app, /if \(openAsanaAfterSave\) openNodeInWork\(updated, "asana"\)/);
+  assert.match(app, /selected\.kind !== "goal" && <button className="secondary" onClick=\{\(\) => openWork\(selected, "asana"\)\}>/);
+  assert.match(app, /\["subcycle", "cycle"\]\.includes\(current\.kind\) && <AsanaSyncPanel/);
+  assert.match(app, /asanaParentNode\(payload\.nodes, selected\)/);
   assert.match(app, /focusTarget === "asana" \? `asana-link-\$\{current\.id\}`/);
   assert.match(app, /node\.kind === "task" && node\.asana\.rules\.status === "asana"/);
 });

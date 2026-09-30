@@ -7,6 +7,15 @@ export function primaryAsanaTitle(node: Pick<WorkNode, "code" | "title">) {
   return `${node.code.trim()} ${node.title.trim()}`.trim();
 }
 
+// Only the primary portal parent defines the Asana parent. Additional reporting
+// links never move a task between Asana branches.
+export function asanaParentNode(nodes: WorkNode[], node: WorkNode) {
+  if (node.kind === "goal" || node.kind === "cycle") return null;
+  const parent = nodes.find((candidate) => candidate.id === node.parentId && !candidate.deletedAt);
+  if (!parent || (node.kind === "subcycle" && parent.kind !== "cycle") || (node.kind === "task" && !["cycle", "subcycle"].includes(parent.kind))) return null;
+  return parent;
+}
+
 export function asanaTitleDiffers(node: Pick<WorkNode, "code" | "title">, remoteName: string) {
   return Boolean(remoteName.trim()) && primaryAsanaTitle(node).replace(/\s+/g, " ").trim() !== remoteName.replace(/\s+/g, " ").trim();
 }

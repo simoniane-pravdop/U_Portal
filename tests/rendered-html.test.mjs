@@ -160,7 +160,7 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /Новий пароль/);
   assert.match(source, /api\/auth\/password/);
   assert.match(source, /api\/admin\/users/);
-  assert.match(source, /Створити в Asana й прив’язати/);
+  assert.match(source, /Створити задачу в Asana/);
   assert.match(source, /Мої завдання ·/);
   assert.match(source, /без проєкту/);
   assert.match(source, /workspaceGid/);

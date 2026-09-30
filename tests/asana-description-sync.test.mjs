@@ -27,10 +27,12 @@ const fixture = (rule = "portal") => ({
   users: [admin],
   nodes: [
     { id: "goal", kind: "goal", parentId: null, code: "S1", title: "Гроші", controlPlace: "", asana: { taskGid: "123456789", taskUrl: "https://app.asana.com/0/12345678/123456789" } },
-    { id: "task", kind: "task", parentId: "goal", code: "P1", title: "Дія", result: "Результат", acceptanceCriteria: "Критерій", controlPlace: "", assigneeId: "executor", acceptorId: "initiator", participantIds: [], plannedEnd: "2026-10-02", asana: { taskGid: "456789012", taskUrl: "", rules: { description: rule, dates: "manual", status: "manual" } } },
+    { id: "cycle", kind: "cycle", parentId: "goal", code: "P1", title: "Напрям", result: "Результат", acceptanceCriteria: "Критерій", controlPlace: "", assigneeId: "executor", acceptorId: "initiator", participantIds: [], plannedEnd: "2026-10-02", asana: { taskGid: "987654321", taskUrl: "https://app.asana.com/0/12345678/987654321", workspaceGid: "12345678" } },
+    { id: "task", kind: "task", parentId: "cycle", code: "P1.1", title: "Дія", result: "Результат", acceptanceCriteria: "Критерій", controlPlace: "", assigneeId: "executor", acceptorId: "initiator", participantIds: [], plannedEnd: "2026-10-02", asana: { taskGid: "456789012", taskUrl: "", rules: { description: rule, dates: "manual", status: "manual" } } },
   ],
 });
 async function sync(action, state = fixture(), actor = admin) {
+  if (action === "create") state.nodes.find((node) => node.id === "task").asana.taskGid = "";
   api.setup(state, actor);
   return api.POST(new Request("https://portal.example/api/asana/sync", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, nodeId: "task", taskGid: "456789012", workspaceGid: "12345678", description: "Паспорт\n\nМІСЦЕ В СТРУКТУРІ\nШлях: старий\n\nОпис: результат <тест>" }) }));
 }
@@ -44,14 +46,14 @@ test("create and portal-controlled update send rich descriptions with actual anc
     assert.match(write.data.html_notes, /Опис: результат &lt;тест&gt;/);
     assert.doesNotMatch(write.data.html_notes, /Шлях: старий/);
     assert.equal("notes" in write.data, false, "Do not send conflicting plain and rich descriptions");
-    if (action === "create") assert.equal(write.data.name, "P1 Дія");
+    if (action === "create") { assert.equal(write.data.name, "P1.1 Дія"); assert.match(write.path, /^\/tasks\/987654321\/subtasks\?/); }
   }
 });
 
 test("manual and Asana-controlled descriptions are not overwritten by a portal update", async () => {
   for (const rule of ["manual", "asana"]) {
     const state = fixture(rule);
-    state.nodes[1].asana.rules.dates = "portal";
+    state.nodes[2].asana.rules.dates = "portal";
     assert.equal((await sync("update", state)).status, 200);
     const write = api.sentRequests().find((request) => request.method === "PUT");
     assert.equal("html_notes" in write.data, false);
@@ -65,7 +67,7 @@ test("read and explicit rename do not replace descriptions or write higher-level
     for (const request of api.sentRequests()) {
       if (request.method !== "GET") {
         assert.match(request.path, /^\/tasks\/456789012\?/);
-        assert.deepEqual(request.data, { name: "P1 Дія" });
+        assert.deepEqual(request.data, { name: "P1.1 Дія" });
       }
     }
   }
@@ -73,5 +75,42 @@ test("read and explicit rename do not replace descriptions or write higher-level
 
 test("unrelated readers cannot trigger description writes", async () => {
   assert.equal((await sync("update", fixture(), { id: "reader", role: "executor", active: true })).status, 403);
+  assert.equal(api.sentRequests().length, 0);
+});
+
+test("a direction becomes a root Asana task, its project a subtask, and its task a nested subtask", async () => {
+  const state = fixture();
+  const cycle = state.nodes.find((node) => node.id === "cycle");
+  cycle.asana.taskGid = "";
+  api.setup(state, admin);
+  let response = await api.POST(new Request("https://portal.example/api/asana/sync", { method: "POST", body: JSON.stringify({ action: "create", nodeId: "cycle", workspaceGid: "12345678" }) }));
+  assert.equal(response.status, 200);
+  assert.match(api.sentRequests().find((request) => request.method === "POST").path, /^\/tasks\?/);
+
+  state.nodes.push({ id: "project", kind: "subcycle", parentId: "cycle", code: "P1.2", title: "Проєкт", result: "Результат", acceptanceCriteria: "Критерій", controlPlace: "", assigneeId: "executor", acceptorId: "initiator", participantIds: [], plannedEnd: "2026-10-02", asana: { taskGid: "", taskUrl: "", rules: { description: "portal", dates: "manual", status: "manual" } } });
+  cycle.asana.taskGid = "987654321";
+  api.setup(state, admin);
+  response = await api.POST(new Request("https://portal.example/api/asana/sync", { method: "POST", body: JSON.stringify({ action: "create", nodeId: "project" }) }));
+  assert.equal(response.status, 200);
+  assert.match(api.sentRequests().find((request) => request.method === "POST").path, /^\/tasks\/987654321\/subtasks\?/);
+  assert.equal((await response.json()).parentGid, "987654321");
+
+  state.nodes.find((node) => node.id === "task").parentId = "project";
+  state.nodes.find((node) => node.id === "task").asana.taskGid = "";
+  state.nodes.find((node) => node.id === "project").asana.taskGid = "111222333";
+  api.setup(state, admin);
+  response = await api.POST(new Request("https://portal.example/api/asana/sync", { method: "POST", body: JSON.stringify({ action: "create", nodeId: "task" }) }));
+  assert.equal(response.status, 200);
+  assert.match(api.sentRequests().find((request) => request.method === "POST").path, /^\/tasks\/111222333\/subtasks\?/);
+});
+
+test("creation waits for the direct parent and never silently makes a root task", async () => {
+  const state = fixture();
+  state.nodes.find((node) => node.id === "cycle").asana.taskGid = "";
+  state.nodes.find((node) => node.id === "task").asana.taskGid = "";
+  api.setup(state, admin);
+  const response = await api.POST(new Request("https://portal.example/api/asana/sync", { method: "POST", body: JSON.stringify({ action: "create", nodeId: "task", workspaceGid: "12345678" }) }));
+  assert.equal(response.status, 409);
+  assert.match((await response.json()).error, /Спочатку створіть або прив’яжіть/);
   assert.equal(api.sentRequests().length, 0);
 });

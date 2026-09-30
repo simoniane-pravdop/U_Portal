@@ -381,7 +381,7 @@ tbody tr:hover { background: #f8fafc; }
 .modal-card > header h2 { margin: 5px 0 0; font: 800 19px Georgia, serif; }
 .modal-card > header button { width: 30px; height: 30px; border: 1px solid rgba(255,255,255,.2); border-radius: 7px; color: #fff; background: rgba(255,255,255,.08); font-size: 20px; }
 .modal-body { overflow: auto; padding: 19px 20px; }
-.modal-card > footer { display: flex; justify-content: flex-end; gap: 7px; padding: 12px 20px; border-top: 1px solid var(--line); background: #f7f9fb; }
+.modal-card > footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; padding: 12px 20px; border-top: 1px solid var(--line); background: #f7f9fb; }
 .modal-card > footer button { padding: 8px 12px; border: 1px solid var(--line); border-radius: 7px; background: #fff; font-size: 9px; font-weight: 800; }
 .modal-card > footer button.primary { color: #fff; border-color: var(--navy-800); background: var(--navy-800); }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
@@ -581,6 +581,10 @@ tbody tr:hover { background: #f8fafc; }
 .asana-link-stack { display: grid; gap: 8px; padding: 4px 14px 8px; }
 .asana-link-form, .asana-create-form, .asana-search-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; }
 .asana-create-form { padding: 4px 14px 8px; }
+.asana-hierarchy { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 10px 14px; padding: 10px 12px; border: 1px solid #b5cce3; border-radius: 8px; background: #edf4fb; color: var(--navy-800); font-size: 12px; }
+.asana-hierarchy strong { font-weight: 800; }
+.asana-hierarchy a { color: #145892; font-weight: 750; text-decoration: underline; }
+.asana-hierarchy-warning { color: #a04618 !important; font-weight: 700; }
 .asana-work .asana-link-form, .asana-work .asana-create-form, .asana-work .asana-search-form { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
 .asana-work .asana-link-form > button, .asana-work .asana-create-form > button, .asana-work .asana-search-form > button { width: 100%; }
 .asana-work .asana-create-form > div { min-width: 0; overflow-wrap: anywhere; }

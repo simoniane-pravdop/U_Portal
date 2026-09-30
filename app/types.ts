@@ -71,6 +71,7 @@ export type AsanaLink = {
   remoteDueOn?: string;
   remoteAssignee?: string;
   remoteFollowerCount?: number;
+  remoteParentGid?: string;
   rules: {
     title: SyncRule;
     assignee: SyncRule;

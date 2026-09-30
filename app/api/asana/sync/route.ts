@@ -1,5 +1,5 @@
 import { asanaRequest } from "../../../lib/asana";
-import { ASANA_MANAGEMENT_TAG, portalOriginId, portalTaskDescriptionForAsana, primaryAsanaTitle } from "../../../lib/asana-integration";
+import { ASANA_MANAGEMENT_TAG, asanaParentNode, portalOriginId, portalTaskDescriptionForAsana, primaryAsanaTitle } from "../../../lib/asana-integration";
 import { currentUser, database, jsonError, loadState, mayEdit } from "../../../lib/server";
 import type { PortalState, WorkUpdate } from "../../../types";
 
@@ -20,6 +20,7 @@ type AsanaTaskEnvelope = {
   data?: {
     gid?: string;
     workspace?: { gid?: string };
+    parent?: { gid?: string } | null;
   };
   [key: string]: unknown;
 };
@@ -146,32 +147,52 @@ export async function POST(request: Request) {
 
   try {
     let result: AsanaTaskEnvelope;
+    let createdParentGid = "";
+    let projectWarning = "";
     if (body.action === "read") {
       if (!body.taskGid) return jsonError("Не вказано GID задачі Asana", 400);
       result = await asanaRequest(
         user.id,
-        `/tasks/${encodeURIComponent(body.taskGid)}?opt_fields=name,completed,due_on,start_on,assignee.name,assignee.email,permalink_url,modified_at,notes,projects.gid,projects.name,workspace.gid,workspace.name,followers.gid,followers.name,followers.email,tags.gid,tags.name`,
+        `/tasks/${encodeURIComponent(body.taskGid)}?opt_fields=name,completed,due_on,start_on,assignee.name,assignee.email,permalink_url,modified_at,notes,projects.gid,projects.name,workspace.gid,workspace.name,parent.gid,followers.gid,followers.name,followers.email,tags.gid,tags.name`,
       ) as AsanaTaskEnvelope;
     } else if (body.action === "create") {
-      if (!body.projectGid && !body.workspaceGid) return jsonError("Не вказано робочий простір Asana", 400);
+      if (node.kind === "goal") return jsonError("Стратегічна ціль не створюється як задача Asana", 400);
+      if (node.asana.taskGid) return jsonError("Задачу Asana вже прив’язано до цієї картки", 409);
+      const parent = asanaParentNode(state.nodes, node);
+      if (node.kind !== "cycle" && !parent) return jsonError("Не визначено батьківський напрям або проєкт", 409);
+      if (parent && !parent.asana.taskGid) return jsonError(`Спочатку створіть або прив’яжіть задачу Asana для ${parent.code} · ${parent.title}`, 409);
+      if (!parent && !body.projectGid && !body.workspaceGid) return jsonError("Не вказано робочий простір Asana", 400);
       const db = await database();
       const connection = db ? await db.prepare("SELECT asana_user_gid FROM asana_connections WHERE user_id = ?").bind(user.id).first<{ asana_user_gid: string }>() : null;
-      result = await asanaRequest(user.id, "/tasks?opt_fields=gid,name,completed,due_on,assignee.name,permalink_url,modified_at,workspace.gid,workspace.name,projects.gid,projects.name", {
+      const taskPath = parent ? `/tasks/${encodeURIComponent(parent.asana.taskGid)}/subtasks` : "/tasks";
+      createdParentGid = parent?.asana.taskGid || "";
+      result = await asanaRequest(user.id, `${taskPath}?opt_fields=gid,name,completed,due_on,assignee.name,permalink_url,modified_at,workspace.gid,workspace.name,parent.gid,projects.gid,projects.name`, {
         method: "POST",
         body: JSON.stringify({
           data: {
             name: primaryAsanaTitle(node),
             html_notes: portalTaskDescriptionForAsana(state.nodes, node, body.description),
-            ...(body.projectGid ? { projects: [body.projectGid] } : { workspace: body.workspaceGid }),
+            ...(!parent ? body.projectGid ? { projects: [body.projectGid] } : { workspace: body.workspaceGid } : {}),
             start_on: body.startOn && (body.dueOn || node.plannedEnd) ? body.startOn : undefined,
             due_on: body.dueOn || node.plannedEnd || undefined,
             assignee: connection?.asana_user_gid || undefined,
           },
         }),
       }) as AsanaTaskEnvelope;
+      // Subtasks do not inherit their parent's project membership in Asana.
+      // Project placement is optional and must not invalidate a created subtask.
+      if (parent && body.projectGid && result.data?.gid) {
+        try {
+          await asanaRequest(user.id, `/tasks/${encodeURIComponent(result.data.gid)}/addProject`, {
+            method: "POST", body: JSON.stringify({ data: { project: body.projectGid } }),
+          });
+        } catch (error) {
+          projectWarning = error instanceof Error ? `Підзадачу створено, але не додано до проєкту Asana: ${error.message}` : "Підзадачу створено, але не додано до проєкту Asana";
+        }
+      }
     } else if (body.action === "rename") {
       if (!body.taskGid || body.taskGid !== node.asana.taskGid) return jsonError("Головну задачу Asana не визначено", 400);
-      result = await asanaRequest(user.id, `/tasks/${encodeURIComponent(body.taskGid)}?opt_fields=gid,name,completed,due_on,assignee.name,permalink_url,modified_at,workspace.gid,workspace.name,projects.gid,projects.name`, {
+      result = await asanaRequest(user.id, `/tasks/${encodeURIComponent(body.taskGid)}?opt_fields=gid,name,completed,due_on,assignee.name,permalink_url,modified_at,workspace.gid,workspace.name,parent.gid,projects.gid,projects.name`, {
         method: "PUT",
         body: JSON.stringify({ data: { name: primaryAsanaTitle(node) } }),
       }) as AsanaTaskEnvelope;
@@ -186,7 +207,7 @@ export async function POST(request: Request) {
       }
       if (node.asana.rules.status === "portal") data.completed = body.completed;
       if (!Object.keys(data).length) return jsonError("Жодне поле не визначено для передання з порталу", 400);
-      result = await asanaRequest(user.id, `/tasks/${encodeURIComponent(body.taskGid)}?opt_fields=gid,name,completed,due_on,assignee.name,permalink_url,modified_at,workspace.gid,workspace.name,projects.gid,projects.name`, {
+      result = await asanaRequest(user.id, `/tasks/${encodeURIComponent(body.taskGid)}?opt_fields=gid,name,completed,due_on,assignee.name,permalink_url,modified_at,workspace.gid,workspace.name,parent.gid,projects.gid,projects.name`, {
         method: "PUT",
         body: JSON.stringify({ data }),
       }) as AsanaTaskEnvelope;
@@ -215,7 +236,7 @@ export async function POST(request: Request) {
         .bind(crypto.randomUUID(), user.id, node.id, body.action === "read" ? "asana_to_portal" : "portal_to_asana", "success", body.action, new Date().toISOString())
         .run();
     }
-    return Response.json({ ...result, followerSync, workspaceGid, tagWarning, storySync });
+    return Response.json({ ...result, followerSync, workspaceGid, parentGid: result.data?.parent?.gid || createdParentGid, projectWarning, tagWarning, storySync });
   } catch (error) {
     return jsonError(error instanceof Error ? error.message : "Помилка синхронізації", 502);
   }
