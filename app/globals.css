@@ -522,6 +522,11 @@ tbody tr:hover { background: #f8fafc; }
 .work-card-description-body dl { display: grid; grid-template-columns: 115px minmax(0, 1fr); gap: 5px 8px; margin: 0; }
 .work-card-description-body dt { color: var(--muted); font-size: 7px; font-weight: 850; text-transform: uppercase; }
 .work-card-description-body dd { min-width: 0; margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; font-size: 8px; line-height: 1.4; }
+.card-path-links { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; white-space: normal; }
+.card-path-links a { border-radius: 5px; color: #145892; font-weight: 750; text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; }
+.card-path-links a:hover, .card-path-links a:focus-visible { color: var(--navy-900); background: #e8f0f8; }
+.card-path-links a[aria-current="page"] { color: var(--navy-900); }
+.card-path-links > span { color: var(--muted); }
 .execution-grid { display: grid; grid-template-columns: minmax(0, 1.28fr) minmax(370px, .72fr); gap: 11px; padding: 14px 22px 25px; align-items: start; }
 .work-section { margin-bottom: 11px; padding: 15px; border: 1px solid var(--line-soft); border-radius: 10px; background: #fff; }
 .work-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
@@ -680,7 +685,10 @@ tbody tr:hover { background: #f8fafc; }
 .tree-catalog:has(.compact-filters) .tree-scroll { height: calc(100% - 88px); }
 .editing-badge { max-width: 92px; overflow: hidden; padding: 3px 5px; border-radius: 999px; color: #75571c; background: var(--amber-soft); font-size: 6px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
 .node-path { display: flex; align-items: stretch; gap: 5px; margin-bottom: 12px; padding: 8px; overflow-x: auto; border: 1px solid var(--line-soft); border-radius: 8px; background: #f7f9fb; }
-.node-path > span { min-width: 95px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 5px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+.node-path > :is(a, span) { min-width: 95px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 5px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+.node-path > a { color: inherit; text-decoration: none; }
+.node-path > a:hover, .node-path > a:focus-visible { border-color: var(--navy-700); background: #e8f0f8; outline: 2px solid var(--navy-700); outline-offset: 1px; }
+.node-path > a:hover small, .node-path > a:focus-visible small { color: var(--navy-900); }
 .node-path b { color: var(--navy-800); font: 800 9px Georgia, serif; }
 .node-path small { overflow: hidden; color: var(--muted); font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
 .node-path i { color: var(--gold); font-style: normal; }

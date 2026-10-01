@@ -3,6 +3,16 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import ts from "typescript";
 
+test("management-card paths link each saved level without discarding an edit draft", async () => {
+  const source = await readFile(new URL("../app/PortalApp.tsx", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(source, /className="card-path-links"/);
+  assert.match(source, /href=\{view === "tree" \? portalHref\("tree", item\.id\) : cardHref\(item, payload\.currentUser\)\}/);
+  assert.match(source, /savedNodeIds\.has\(item\.id\).*href=\{portalHref\("tree", item\.id\)\} target="_blank" rel="noopener noreferrer"/s);
+  assert.match(styles, /\.card-path-links a:hover, \.card-path-links a:focus-visible/);
+  assert.match(styles, /\.node-path > a:hover, \.node-path > a:focus-visible/);
+});
+
 test("coordination flags open cycles and subcycles without active descendant tasks", async () => {
   const source = await readFile(new URL("../app/PortalApp.tsx", import.meta.url), "utf8");
   const rules = await readFile(new URL("../app/coordination-rules.ts", import.meta.url), "utf8");

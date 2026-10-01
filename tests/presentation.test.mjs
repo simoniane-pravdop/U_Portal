@@ -88,7 +88,7 @@ test("creation metadata uses the saved author and timestamp, with an audit-only 
 
 test("tree passport opens filled fields before the work snapshot", async () => {
   const source = await readFile(new URL("../app/PortalApp.tsx", import.meta.url), "utf8");
-  const passport = source.indexOf('<WorkCardDescription node={selected} payload={payload} userById={userById} expanded />');
+  const passport = source.indexOf('<WorkCardDescription node={selected} payload={payload} userById={userById} view="tree" expanded />');
   const snapshot = source.indexOf('<TreeWorkSnapshot node={selected} payload={payload} userById={userById} />');
   assert.ok(passport > 0 && snapshot > passport);
   for (const field of ["node.description", "node.result", "node.acceptanceCriteria", "node.authority", "node.resource", "node.controlPlace"]) {
