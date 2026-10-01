@@ -175,8 +175,10 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /Обмеження повноважень/);
   assert.doesNotMatch(source, /<dt>Повноваження<\/dt>|label="Повноваження"|`Повноваження:/);
   assert.match(source, /Дедлайн до -/);
+  assert.match(source, /Строк виконання в Asana:/);
   assert.doesNotMatch(source, /startOn: selected\.plannedStart/);
-  assert.match(source, /dueOn: selected\.plannedEnd/);
+  assert.doesNotMatch(source, /dueOn: selected\.plannedEnd/);
+  assert.match(source, /node\.forecastEnd = task\.due_on/);
   assert.match(source, /Паспорт робочої картки/);
   assert.match(source, /work-card-description/);
   assert.match(source, /work-card-sections/);

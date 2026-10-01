@@ -7,8 +7,8 @@ const noImports = (source) => source.replace(/^import .*;\n/gm, "");
 const sources = await Promise.all(["app/lib/asana-links.ts", "app/lib/asana-integration.ts", "app/api/asana/sync/route.ts"].map(async (path) => noImports(await readFile(new URL(`../${path}`, import.meta.url), "utf8"))));
 const compiled = ts.transpileModule([
   ...sources,
-  `let state, actor, requests;
-   export function setup(nextState, nextActor) { state = structuredClone(nextState); actor = nextActor; requests = []; }
+  `let state, actor, requests, tagPageWithMatch;
+   export function setup(nextState, nextActor, options = {}) { state = structuredClone(nextState); actor = nextActor; requests = []; tagPageWithMatch = options.tagPageWithMatch ?? -1; }
    export function sentRequests() { return requests; }
    const loadState = async () => ({ state });
    const currentUser = async () => actor;
@@ -18,6 +18,11 @@ const compiled = ts.transpileModule([
    const asanaRequest = async (userId, path, init = {}) => {
      requests.push({ userId, path, method: init.method || "GET", data: init.body ? JSON.parse(init.body).data : undefined });
      if (path.includes("/stories?")) return { data: [] };
+     if (tagPageWithMatch >= 0 && path.includes("/workspaces/") && path.includes("/tags?")) {
+       const page = Number(new URL(path, "https://asana.example").searchParams.get("offset")?.replace("page-", "") || 0);
+       return { data: page === tagPageWithMatch ? [{ gid: "567890123", name: ASANA_MANAGEMENT_TAG }] : [], next_page: page < tagPageWithMatch ? { offset: "page-" + (page + 1) } : null };
+     }
+     if (tagPageWithMatch >= 0 && path.includes("/tasks/") && path.includes("opt_fields=tags.gid")) return { data: { gid: "456789012", tags: [] } };
      return { data: { gid: "456789012", workspace: { gid: "12345678" }, tags: [{ gid: "567890123", name: ASANA_MANAGEMENT_TAG }] } };
    };`,
 ].join("\n"), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
@@ -50,19 +55,45 @@ test("create and portal-controlled update send rich descriptions with actual anc
   }
 });
 
-test("free-plan Asana writes keep the due date but never send start_on", async () => {
+test("free-plan Asana writes use the portal forecast and never send start_on", async () => {
   for (const action of ["create", "update"]) {
     const state = fixture();
     state.nodes[2].plannedStart = "2026-09-30";
+    state.nodes[2].forecastEnd = "2026-10-08";
     state.nodes[2].asana.rules.dates = "portal";
     if (action === "create") state.nodes[2].asana.taskGid = "";
     api.setup(state, admin);
     const response = await api.POST(new Request("https://portal.example/api/asana/sync", { method: "POST", body: JSON.stringify({ action, nodeId: "task", taskGid: "456789012", workspaceGid: "12345678", startOn: "2026-09-30", dueOn: "2026-10-02" }) }));
     assert.equal(response.status, 200);
     const write = api.sentRequests().find((request) => request.method === (action === "create" ? "POST" : "PUT"));
-    assert.equal(write.data.due_on, "2026-10-02");
+    assert.equal(write.data.due_on, "2026-10-08");
     assert.equal("start_on" in write.data, false);
   }
+});
+
+test("when no portal forecast exists, Asana falls back to the planned deadline", async () => {
+  for (const action of ["create", "update"]) {
+    const state = fixture();
+    state.nodes[2].asana.rules.dates = "portal";
+    if (action === "create") state.nodes[2].asana.taskGid = "";
+    api.setup(state, admin);
+    const response = await api.POST(new Request("https://portal.example/api/asana/sync", { method: "POST", body: JSON.stringify({ action, nodeId: "task", taskGid: "456789012", dueOn: "2099-01-01" }) }));
+    assert.equal(response.status, 200);
+    const write = api.sentRequests().find((request) => request.method === (action === "create" ? "POST" : "PUT"));
+    assert.equal(write.data.due_on, "2026-10-02");
+  }
+});
+
+test("a management tag beyond the first 1000 workspace tags is found without creating a duplicate", async () => {
+  const state = fixture();
+  state.nodes[2].asana.taskGid = "";
+  api.setup(state, admin, { tagPageWithMatch: 11 });
+  const response = await api.POST(new Request("https://portal.example/api/asana/sync", { method: "POST", body: JSON.stringify({ action: "create", nodeId: "task", workspaceGid: "12345678" }) }));
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).tagWarning, "");
+  assert.equal(api.sentRequests().filter((request) => request.path.includes("/tags?")).length, 12);
+  assert.equal(api.sentRequests().some((request) => request.path.includes("/addTag") && request.data.tag === "567890123"), true);
+  assert.equal(api.sentRequests().some((request) => request.path.includes("/workspaces/") && request.path.endsWith("/tags") && request.method === "POST"), false);
 });
 
 test("manual and Asana-controlled descriptions are not overwritten by a portal update", async () => {

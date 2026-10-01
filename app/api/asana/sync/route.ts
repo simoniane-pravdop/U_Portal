@@ -1,5 +1,5 @@
 import { asanaRequest } from "../../../lib/asana";
-import { ASANA_MANAGEMENT_TAG, asanaParentNode, portalOriginId, portalTaskDescriptionForAsana, primaryAsanaTitle } from "../../../lib/asana-integration";
+import { ASANA_MANAGEMENT_TAG, asanaDueDate, asanaParentNode, portalOriginId, portalTaskDescriptionForAsana, primaryAsanaTitle } from "../../../lib/asana-integration";
 import { currentUser, database, jsonError, loadState, mayEdit } from "../../../lib/server";
 import type { PortalState, WorkUpdate } from "../../../types";
 
@@ -11,7 +11,6 @@ type SyncBody = {
   workspaceGid?: string;
   title?: string;
   description?: string;
-  dueOn?: string;
   completed?: boolean;
   expectedParentGid?: string;
 };
@@ -88,7 +87,10 @@ async function ensureManagementTag(userId: string, taskGid: string, workspaceGid
     if (task.data?.tags?.some((tag) => tag.name === ASANA_MANAGEMENT_TAG)) return "";
     let offset = "";
     let tagGid = "";
-    for (let page = 0; page < 10; page += 1) {
+    const seenOffsets = new Set<string>();
+    for (let page = 0; page < 500; page += 1) {
+      if (seenOffsets.has(offset)) return "Asana повторила сторінку позначок — позначку не додано";
+      seenOffsets.add(offset);
       const params = new URLSearchParams({ limit: "100", opt_fields: "gid,name" });
       if (offset) params.set("offset", offset);
       const tags = await asanaRequest(userId, `/workspaces/${encodeURIComponent(workspaceGid)}/tags?${params}`) as { data?: Array<{ gid: string; name: string }>; next_page?: { offset?: string } | null };
@@ -96,7 +98,7 @@ async function ensureManagementTag(userId: string, taskGid: string, workspaceGid
       offset = tags.next_page?.offset || "";
       if (tagGid || !offset) break;
     }
-    if (!tagGid && offset) return "Позначку не знайдено серед перших 1000 позначок робочого простору";
+    if (!tagGid && offset) return "Позначку не знайдено серед перших 50 000 позначок робочого простору — її не створено, щоб уникнути дубліката";
     if (!tagGid) {
       const created = await asanaRequest(userId, `/workspaces/${encodeURIComponent(workspaceGid)}/tags`, { method: "POST", body: JSON.stringify({ data: { name: ASANA_MANAGEMENT_TAG } }) }) as { data?: { gid?: string } };
       tagGid = created.data?.gid || "";
@@ -173,7 +175,7 @@ export async function POST(request: Request) {
             name: primaryAsanaTitle(node),
             html_notes: portalTaskDescriptionForAsana(state.nodes, node, body.description),
             ...(!parent ? body.projectGid ? { projects: [body.projectGid] } : { workspace: body.workspaceGid } : {}),
-            due_on: body.dueOn || node.plannedEnd || undefined,
+            due_on: asanaDueDate(node) || undefined,
             assignee: connection?.asana_user_gid || undefined,
           },
         }),
@@ -216,7 +218,7 @@ export async function POST(request: Request) {
       // Existing Asana task names are changed only by the explicit rename action.
       if (node.asana.rules.description === "portal") data.html_notes = portalTaskDescriptionForAsana(state.nodes, node, body.description);
       if (node.asana.rules.dates === "portal") {
-        data.due_on = body.dueOn || null;
+        data.due_on = asanaDueDate(node) || null;
       }
       if (node.asana.rules.status === "portal") data.completed = body.completed;
       if (!Object.keys(data).length) return jsonError("Жодне поле не визначено для передання з порталу", 400);

@@ -7,6 +7,12 @@ export function primaryAsanaTitle(node: Pick<WorkNode, "code" | "title">) {
   return `${node.code.trim()} ${node.title.trim()}`.trim();
 }
 
+// Asana's due date follows the current portal forecast. The agreed deadline is
+// only a fallback until a forecast has been entered.
+export function asanaDueDate(node: Pick<WorkNode, "forecastEnd" | "plannedEnd">) {
+  return node.forecastEnd || node.plannedEnd || "";
+}
+
 // Only the primary portal parent defines the Asana parent. Additional reporting
 // links never move a task between Asana branches.
 export function asanaParentNode(nodes: WorkNode[], node: WorkNode) {

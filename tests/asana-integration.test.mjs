@@ -6,7 +6,13 @@ import ts from "typescript";
 const noImports = (source) => source.replace(/^import .*;\n/gm, "");
 const source = ["app/lib/asana-links.ts", "app/lib/asana-integration.ts"].map(async (path) => noImports(await readFile(new URL(`../${path}`, import.meta.url), "utf8")));
 const compiled = ts.transpileModule((await Promise.all(source)).join("\n"), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-const { ASANA_MANAGEMENT_TAG, primaryAsanaTitle, asanaTitleDiffers, portalMessageForAsana, portalReportForAsana, portalOriginId, portalTaskDescriptionForAsana } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`);
+const { ASANA_MANAGEMENT_TAG, asanaDueDate, primaryAsanaTitle, asanaTitleDiffers, portalMessageForAsana, portalReportForAsana, portalOriginId, portalTaskDescriptionForAsana } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`);
+
+test("Asana due date follows the portal forecast, falling back to the planned deadline", () => {
+  assert.equal(asanaDueDate({ forecastEnd: "2026-10-08", plannedEnd: "2026-10-02" }), "2026-10-08");
+  assert.equal(asanaDueDate({ forecastEnd: "", plannedEnd: "2026-10-02" }), "2026-10-02");
+  assert.equal(asanaDueDate({ forecastEnd: "", plannedEnd: "" }), "");
+});
 
 test("a primary Asana task uses the management code and title", () => {
   const node = { code: "P1.1.1", title: "Контроль публікацій" };

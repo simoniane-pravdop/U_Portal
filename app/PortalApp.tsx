@@ -12,7 +12,7 @@ import { projectTaskResults } from "./lib/project-results";
 import { duplicateNodeDraft } from "./lib/duplicate-node";
 import { reportingChildren, reportingDescendants, reportingLinkError } from "./lib/reporting-links";
 import { asanaLinkLabel, asanaLinks } from "./lib/asana-links";
-import { asanaParentNode, asanaTitleDiffers, primaryAsanaTitle } from "./lib/asana-integration";
+import { asanaDueDate, asanaParentNode, asanaTitleDiffers, primaryAsanaTitle } from "./lib/asana-integration";
 import { useAsanaTitles } from "./lib/use-asana-titles";
 import { generatePassword, mayResetPassword } from "./lib/user-password";
 import { branchNodes, mayManageTrash } from "./lib/trash";
@@ -264,6 +264,7 @@ function buildAsanaDescription(payload: PortalPayload, node: WorkNode) {
     `Дата початку: ${dateLabel(node.plannedStart)}`,
     `Дедлайн до - ${dateLabel(node.plannedEnd)}`,
     `Прогноз завершення: ${dateLabel(node.forecastEnd)}`,
+    `Строк виконання в Asana: ${dateLabel(asanaDueDate(node))}${node.forecastEnd ? " (за прогнозом УП)" : " (за плановим строком УП, прогнозу немає)"}`,
     ...(showActualMilestones(node.kind) ? [
       `Фактичний початок: ${dateLabel(node.actualStart)}`,
       `Фактичне завершення: ${dateLabel(node.actualEnd)}`,
@@ -1789,7 +1790,7 @@ function AsanaSyncPanel({ payload, selected, asanaStatus, mutate, setNotice, com
       const normalizedTaskGid = normalizeTaskGid(taskOverride || taskGid || selected.asana.taskGid);
       const resolvedProjectGid = action === "read" ? "" : projectGid || selected.asana.projectGid;
       const resolvedWorkspaceGid = workspaceGid || selected.asana.workspaceGid || (!resolvedProjectGid && asanaWorkspaces.length === 1 ? asanaWorkspaces[0].gid : "");
-      const response = await fetch("/api/asana/sync", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, nodeId: selected.id, taskGid: normalizedTaskGid, projectGid: resolvedProjectGid, workspaceGid: resolvedWorkspaceGid, title: selected.title, description: buildAsanaDescription(payload, selected), dueOn: selected.plannedEnd, completed: selected.lifecycle === "completed", expectedParentGid: action === "move" ? selected.asana.remoteParentGid : undefined }) });
+      const response = await fetch("/api/asana/sync", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, nodeId: selected.id, taskGid: normalizedTaskGid, projectGid: resolvedProjectGid, workspaceGid: resolvedWorkspaceGid, title: selected.title, description: buildAsanaDescription(payload, selected), completed: selected.lifecycle === "completed", expectedParentGid: action === "move" ? selected.asana.remoteParentGid : undefined }) });
       const result = (await response.json()) as { error?: string; workspaceGid?: string; parentGid?: string; projectWarning?: string; tagWarning?: string; storySync?: { imported: number; partial: boolean; error?: string }; followerSync?: { added: number; skipped: string[] }; data?: { gid?: string; name?: string; notes?: string; due_on?: string | null; completed?: boolean; permalink_url?: string; modified_at?: string; parent?: { gid?: string } | null; assignee?: { email?: string; name?: string }; projects?: Array<{ gid: string; name: string }>; followers?: Array<{ gid: string; name: string; email?: string }> } };
       if (!response.ok) throw new Error(result.error || "Помилка Asana");
       const task = result.data || {};
@@ -1797,7 +1798,10 @@ function AsanaSyncPanel({ payload, selected, asanaStatus, mutate, setNotice, com
         const node = state.nodes.find((item) => item.id === selected.id)!;
         if (action === "read") {
           if (node.asana.rules.title === "asana") node.title = task.name || node.title;
-          if (node.asana.rules.dates === "asana") node.plannedEnd = task.due_on || node.plannedEnd;
+          if (node.asana.rules.dates === "asana") {
+            node.forecastEnd = task.due_on || "";
+            node.plannedEnd = plannedEndForForecast(node.plannedEnd, node.forecastEnd);
+          }
           if (node.kind === "task" && node.asana.rules.status === "asana") {
             if (task.completed) {
               const accepted = state.acceptances.some((item) => item.nodeId === node.id && item.status === "accepted");
@@ -1848,7 +1852,9 @@ function AsanaSyncPanel({ payload, selected, asanaStatus, mutate, setNotice, com
       setDraft({ taskGid: task?.gid || normalizedTaskGid, projectGid: action === "read" || action === "move" || result.projectWarning ? task.projects?.[0]?.gid || "" : resolvedProjectGid, workspaceGid: result.workspaceGid || resolvedWorkspaceGid, mode: "link" });
       clearDraft();
       const followerNote = result.followerSync?.added ? ` · додано фоловерів: ${result.followerSync.added}` : "";
-      setNotice(result.projectWarning || result.tagWarning || result.storySync?.error || (action === "create" ? `${parent ? "Підзадачу" : "Задачу"} Asana створено й прив’язано${followerNote}` : action === "read" ? `Отримано стан та коментарі Asana: ${task.completed ? "завершено" : "активне"}${followerNote}${result.storySync?.partial ? " · частину давньої історії не завантажено" : ""}` : action === "rename" ? "Назву головної задачі Asana оновлено" : action === "move" ? `Задачу перенесено під ${parent?.code} в Asana` : `Зміни передано в Asana${followerNote}`), result.projectWarning || result.tagWarning || result.storySync?.error ? "error" : undefined);
+      const successMessage = action === "create" ? `${parent ? "Підзадачу" : "Задачу"} Asana створено й прив’язано${followerNote}` : action === "read" ? `Отримано стан та коментарі Asana: ${task.completed ? "завершено" : "активне"}${followerNote}${result.storySync?.partial ? " · частину давньої історії не завантажено" : ""}` : action === "rename" ? "Назву головної задачі Asana оновлено" : action === "move" ? `Задачу перенесено під ${parent?.code} в Asana` : `Зміни передано в Asana${followerNote}`;
+      const warnings = [result.projectWarning, result.tagWarning, result.storySync?.error].filter(Boolean);
+      setNotice(warnings.length ? `${successMessage}. Додатково: ${warnings.join(" · ")}` : successMessage);
     } catch (error) { setNotice(error instanceof Error ? error.message : "Помилка синхронізації", "error"); }
     finally { setBusy(false); }
   };
