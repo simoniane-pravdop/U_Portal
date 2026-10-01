@@ -235,7 +235,7 @@ export async function POST(request: Request) {
     }
     const followerEmails = node.participantIds.map((id) => state.users.find((candidate) => candidate.id === id && candidate.active)?.email || "").filter(Boolean);
     const followerSync = await addPortalFollowers(user.id, taskGid, workspaceGid, followerEmails);
-    const tagWarning = body.action === "create" || body.action === "read" && (mayEdit(user, node.acceptorId) || node.assigneeId === user.id) ? await ensureManagementTag(user.id, taskGid, workspaceGid) : "";
+    const tagWarning = body.action === "create" || body.action === "update" || body.action === "read" && (mayEdit(user, node.acceptorId) || node.assigneeId === user.id) ? await ensureManagementTag(user.id, taskGid, workspaceGid) : "";
     let storySync: { imported: number; partial: boolean; error?: string } = { imported: 0, partial: false };
     if (body.action === "read") {
       try {

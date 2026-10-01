@@ -84,16 +84,19 @@ test("when no portal forecast exists, Asana falls back to the planned deadline",
   }
 });
 
-test("a management tag beyond the first 1000 workspace tags is found without creating a duplicate", async () => {
-  const state = fixture();
-  state.nodes[2].asana.taskGid = "";
-  api.setup(state, admin, { tagPageWithMatch: 11 });
-  const response = await api.POST(new Request("https://portal.example/api/asana/sync", { method: "POST", body: JSON.stringify({ action: "create", nodeId: "task", workspaceGid: "12345678" }) }));
-  assert.equal(response.status, 200);
-  assert.equal((await response.json()).tagWarning, "");
-  assert.equal(api.sentRequests().filter((request) => request.path.includes("/tags?")).length, 12);
-  assert.equal(api.sentRequests().some((request) => request.path.includes("/addTag") && request.data.tag === "567890123"), true);
-  assert.equal(api.sentRequests().some((request) => request.path.includes("/workspaces/") && request.path.endsWith("/tags") && request.method === "POST"), false);
+test("a management tag beyond the first 1000 workspace tags is found on new and already linked tasks without creating a duplicate", async () => {
+  for (const action of ["create", "update"]) {
+    const state = fixture();
+    if (action === "create") state.nodes[2].asana.taskGid = "";
+    state.nodes[2].asana.rules.dates = "portal";
+    api.setup(state, admin, { tagPageWithMatch: 11 });
+    const response = await api.POST(new Request("https://portal.example/api/asana/sync", { method: "POST", body: JSON.stringify({ action, nodeId: "task", taskGid: "456789012", workspaceGid: "12345678" }) }));
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).tagWarning, "");
+    assert.equal(api.sentRequests().filter((request) => request.path.includes("/tags?")).length, 12);
+    assert.equal(api.sentRequests().some((request) => request.path.includes("/addTag") && request.data.tag === "567890123"), true);
+    assert.equal(api.sentRequests().some((request) => request.path.includes("/workspaces/") && request.path.endsWith("/tags") && request.method === "POST"), false);
+  }
 });
 
 test("manual and Asana-controlled descriptions are not overwritten by a portal update", async () => {
