@@ -70,10 +70,40 @@ test("only managers or each card's initiator may remove a branch", () => {
   assert.throws(() => trash.changeTrash(before, initiator, "P1", "delete"), /прав/);
   assert.throws(() => trash.changeTrash(before, actor, "missing", "delete"), /не знайдено/);
 });
+test("permanent deletion removes a deleted branch, its records, and independently deleted descendants", () => {
+  const childRemoved = trash.changeTrash(state(), actor, "P1.1.1", "delete").next;
+  const removed = trash.changeTrash(childRemoved, actor, "P1", "delete").next;
+  removed.nodes[3].linkedParentIds = ["P1.1"];
+  removed.notifications.push({ id: "notice", nodeId: "P1.1.1" });
+  removed.coordinations.push({ id: "coord", subcycleId: "P1.1", taskState: [{ nodeId: "P1.1.1" }], blockerIds: ["blocker"], decisionIds: [] });
+  const purged = trash.purgeTrash(removed, actor, "P1", "2026-09-28T11:00:00Z");
+  assert.equal(purged.targets.length, 3);
+  assert.deepEqual(purged.next.nodes.map((item) => item.id), ["P2"]);
+  for (const key of ["dependencies", "discussions", "blockers", "notifications", "coordinations"]) assert.deepEqual(purged.next[key], []);
+  assert.deepEqual(purged.next.nodes[0].linkedParentIds, []);
+  assert.match(purged.next.audit[0].action, /Остаточно видалено/);
+  assert.throws(() => trash.purgeTrash(removed, { ...actor, role: "coordinator" }, "P1"), /адміністратор/);
+  assert.throws(() => trash.purgeTrash(state(), actor, "P1"), /кошик/);
+});
+test("emptying the trash leaves active cards and never removes their own records", () => {
+  const removed = trash.changeTrash(state(), actor, "P1.1.1", "delete").next;
+  removed.coordinations.push({ id: "coord", subcycleId: "P1.1", taskState: [{ nodeId: "P1.1.1" }], blockerIds: ["blocker"], decisionIds: [] });
+  const purged = trash.purgeTrash(removed, actor, null);
+  assert.deepEqual(purged.next.nodes.map((item) => item.id), ["P1", "P1.1", "P2"]);
+  assert.deepEqual(purged.next.coordinations[0].taskState, []);
+  assert.deepEqual(purged.next.coordinations[0].blockerIds, []);
+});
+test("an individual card inside a removed branch can be purged without deleting its parent or siblings", () => {
+  const removed = trash.changeTrash(state(), actor, "P1", "delete").next;
+  const purged = trash.purgeTrash(removed, actor, "P1.1.1");
+  assert.deepEqual(purged.next.nodes.map((item) => item.id), ["P1", "P1.1", "P2"]);
+  assert.ok(purged.next.nodes[0].deletedAt);
+  assert.ok(purged.next.nodes[1].deletedAt);
+});
 
 async function fixture({ conflict = false, locked = false, unauthenticated = false } = {}) {
   const sqlite = new DatabaseSync(":memory:");
-  sqlite.exec("CREATE TABLE portal_state (id TEXT PRIMARY KEY, payload TEXT, revision INTEGER, updated_at TEXT, updated_by TEXT); CREATE TABLE portal_edit_locks(entity_id TEXT, user_id TEXT, user_name TEXT, expires_at TEXT); CREATE TABLE portal_entity_versions(id TEXT, entity_id TEXT, revision INTEGER, user_id TEXT, user_name TEXT, action TEXT, payload TEXT, created_at TEXT);");
+  sqlite.exec("CREATE TABLE portal_state (id TEXT PRIMARY KEY, payload TEXT, revision INTEGER, updated_at TEXT, updated_by TEXT); CREATE TABLE portal_edit_locks(entity_id TEXT, user_id TEXT, user_name TEXT, expires_at TEXT); CREATE TABLE portal_entity_versions(id TEXT, entity_id TEXT, revision INTEGER, user_id TEXT, user_name TEXT, action TEXT, payload TEXT, created_at TEXT); CREATE TABLE asana_outbox (node_id TEXT); CREATE TABLE sync_events (node_id TEXT);");
   sqlite.prepare("INSERT INTO portal_state VALUES ('main', ?, 1, '', '')").run(JSON.stringify(state()));
   if (locked) sqlite.exec("INSERT INTO portal_edit_locks VALUES ('P1.1.1','other','Other editor','2099-01-01');");
   const db = {
@@ -113,6 +143,33 @@ test("stale versions, concurrent saves, active editors and anonymous requests ca
       assert.equal(sqlite.prepare("SELECT count(*) AS n FROM portal_entity_versions").get().n, 0);
     } finally { sqlite.close(); }
   }
+});
+test("permanent deletion requires confirmation and removes server-side versions and pending sync records", async () => {
+  const { sqlite, post } = await fixture();
+  try {
+    assert.equal((await post({ action: "delete", nodeId: "P1.1.1", expectedRevision: 1 })).status, 200);
+    sqlite.prepare("INSERT INTO asana_outbox VALUES (?)").run("P1.1.1");
+    sqlite.prepare("INSERT INTO sync_events VALUES (?)").run("P1.1.1");
+    assert.equal((await post({ action: "purge", nodeId: "P1.1.1", expectedRevision: 2 })).status, 400);
+    assert.equal((await post({ action: "purge", nodeId: "P1.1.1", confirmation: "P1.1.1", expectedRevision: 2 })).status, 200);
+    const saved = JSON.parse(sqlite.prepare("SELECT payload FROM portal_state").get().payload);
+    assert.equal(saved.nodes.some((item) => item.id === "P1.1.1"), false);
+    assert.equal(saved.dependencies.length, 0);
+    assert.equal(sqlite.prepare("SELECT count(*) AS n FROM portal_entity_versions WHERE entity_id = 'P1.1.1'").get().n, 0);
+    assert.equal(sqlite.prepare("SELECT count(*) AS n FROM asana_outbox").get().n, 0);
+    assert.equal(sqlite.prepare("SELECT count(*) AS n FROM sync_events").get().n, 0);
+    assert.equal((await post({ action: "empty", confirmation: "ВИДАЛИТИ ВСЕ", expectedRevision: 3 })).status, 409);
+  } finally { sqlite.close(); }
+});
+test("emptying requires its exact phrase and respects revisions", async () => {
+  const { sqlite, post } = await fixture();
+  try {
+    await post({ action: "delete", nodeId: "P1.1.1", expectedRevision: 1 });
+    assert.equal((await post({ action: "empty", confirmation: "remove", expectedRevision: 2 })).status, 400);
+    assert.equal((await post({ action: "empty", confirmation: "ВИДАЛИТИ ВСЕ", expectedRevision: 1 })).status, 409);
+    assert.equal((await post({ action: "empty", confirmation: "ВИДАЛИТИ ВСЕ", expectedRevision: 2 })).status, 200);
+    assert.equal(JSON.parse(sqlite.prepare("SELECT payload FROM portal_state").get().payload).nodes.length, 3);
+  } finally { sqlite.close(); }
 });
 test("action menu uses a body-level layer above sticky navigation and both entry points provide deletion", async () => {
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");

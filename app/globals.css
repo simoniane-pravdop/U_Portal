@@ -1525,15 +1525,26 @@ body { font-size: 14px; }
 .trash-list article > div { display: grid; gap: 5px; overflow-wrap: anywhere; }
 .trash-list article small, .trash-list article span { font-size: 14px; color: var(--muted); }
 .trash-list button { min-height: 44px; padding: 8px 12px; }
+.trash-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 12px; }
+.trash-toolbar span { color: var(--muted); font-size: 13px; }
+.trash-actions { display: flex !important; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px !important; }
+.trash-purge-action { min-height: 40px; padding: 8px 12px; border: 1px solid #b33c45; border-radius: 7px; color: #fff; background: #a02832; font-size: 13px; font-weight: 800; cursor: pointer; }
+.trash-purge-action:hover, .trash-purge-action:focus-visible { background: #842029; }
+.trash-purge-action:disabled { opacity: .55; cursor: not-allowed; }
 .trash-branch, .trash-hint { grid-column: 1 / -1; }
 .trash-branch summary { cursor: pointer; padding: 7px 0; }
 .trash-branch ul { margin: 6px 0; padding-left: 22px; line-height: 1.6; }
+.trash-branch li { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 5px 0; }
+.trash-branch li > span { min-width: 0; overflow-wrap: anywhere; }
+.trash-branch li > button { flex: 0 0 auto; }
 @media (max-width: 600px) {
   .work-card-actions-popover { top: auto; right: 8px; bottom: calc(65px + env(safe-area-inset-bottom)); left: 8px; width: auto; max-height: calc(100dvh - 81px - env(safe-area-inset-bottom)); }
   .work-card-actions-popover button { min-height: 44px; font-size: 15px; }
   .trash-panel > summary { flex-wrap: wrap; }
+  .trash-toolbar { align-items: stretch; flex-direction: column; }
   .trash-list > article { grid-template-columns: minmax(0,1fr); }
-  .trash-list button { justify-self: start; }
+  .trash-actions { justify-content: flex-start; }
+  .trash-branch li { align-items: flex-start; flex-direction: column; }
 }
 .work-card-sections { position: sticky; z-index: 12; top: 0; display: flex; gap: 5px; padding: 8px 14px; overflow-x: auto; border-bottom: 1px solid var(--line); background: rgba(255,255,255,.96); }
 .work-card-sections button { flex: 0 0 auto; min-height: 34px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--navy-700); background: #fff; font-size: 11px; font-weight: 800; }

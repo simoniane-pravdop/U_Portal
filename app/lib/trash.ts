@@ -67,3 +67,46 @@ export function changeTrash(current: PortalState, user: SessionUser, rootId: str
   next.revision = current.revision + 1;
   return { next, targets, changed };
 }
+
+/** Irreversible removal from the portal only; Asana tasks are never changed. */
+export function purgeTrash(current: PortalState, user: SessionUser, rootId: string | null, at = new Date().toISOString()) {
+  if (!["owner", "admin"].includes(user.role)) throw new TrashError("Остаточно видаляти картки може лише власник або адміністратор", 403);
+  const root = rootId ? current.nodes.find((node) => node.id === rootId) : undefined;
+  if (rootId && (!root || !root.deletedAt)) throw new TrashError("Оберіть картку в кошику", 404);
+  // Include independently removed descendants: no card may keep a missing parent.
+  const targets = root ? branchNodes(current.nodes, root.id) : current.nodes.filter((node) => node.deletedAt);
+  if (!targets.length) throw new TrashError("Кошик порожній", 409);
+  if (targets.some((node) => !node.deletedAt)) throw new TrashError("У гілці є активні картки — спочатку перенесіть їх до кошика", 409);
+  const ids = new Set(targets.map((node) => node.id));
+  const next: PortalState = structuredClone(current);
+  next.nodes = next.nodes.filter((node) => !ids.has(node.id));
+  for (const node of next.nodes) {
+    const linked = node.linkedParentIds || [];
+    if (linked.some((id) => ids.has(id))) {
+      node.linkedParentIds = linked.filter((id) => !ids.has(id));
+      node.updatedAt = at;
+    }
+  }
+  next.dependencies = next.dependencies.filter((item) => !ids.has(item.predecessorId) && !ids.has(item.successorId));
+  const removedBlockerIds = new Set(next.blockers.filter((item) => ids.has(item.nodeId)).map((item) => item.id));
+  const removedDecisionIds = new Set(next.decisions.filter((item) => ids.has(item.nodeId)).map((item) => item.id));
+  next.blockers = next.blockers.filter((item) => !ids.has(item.nodeId));
+  next.decisions = next.decisions.filter((item) => !ids.has(item.nodeId));
+  next.acceptances = next.acceptances.filter((item) => !ids.has(item.nodeId));
+  next.discussions = next.discussions.filter((item) => !ids.has(item.nodeId));
+  next.notifications = next.notifications.filter((item) => !ids.has(item.nodeId));
+  next.coordinations = next.coordinations.filter((item) => !ids.has(item.cycleId || "") && !ids.has(item.subcycleId)).map((item) => ({
+    ...item,
+    taskState: item.taskState.filter((task) => !ids.has(task.nodeId)),
+    blockerIds: item.blockerIds.filter((id) => !removedBlockerIds.has(id)),
+    decisionIds: item.decisionIds.filter((id) => !removedDecisionIds.has(id)),
+  }));
+  recalculateHierarchy(next);
+  const changed = next.nodes.filter((node) => JSON.stringify(node) !== JSON.stringify(current.nodes.find((item) => item.id === node.id)));
+  next.audit = [
+    { id: crypto.randomUUID(), at, by: user.name, entityId: "portal", action: root ? `Остаточно видалено ${root.code} та гілку (${targets.length} карток)` : `Очищено кошик (${targets.length} карток)` },
+    ...next.audit.filter((item) => !ids.has(item.entityId)),
+  ].slice(0, 2000);
+  next.revision = current.revision + 1;
+  return { next, targets, changed };
+}

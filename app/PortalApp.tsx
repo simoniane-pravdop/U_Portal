@@ -2017,33 +2017,54 @@ function SettingsView({ payload, asanaStatus, setAsanaStatus, telegramStatus, se
     <AsanaAccountPanel payload={payload} status={asanaStatus} notify={setNotice} />
     <TelegramPanel payload={payload} status={telegramStatus} setStatus={setTelegramStatus} notify={setNotice} />
     {administrator && <IntegrationSetupPanel notify={setNotice} refresh={() => { void fetch("/api/asana/status", { cache: "no-store" }).then((response) => response.json()).then((value) => setAsanaStatus(value as Parameters<typeof setAsanaStatus>[0])); void fetch("/api/telegram/status", { cache: "no-store" }).then((response) => response.json()).then((value) => setTelegramStatus(value as TelegramStatus)); }} />}
-    <TrashPanel payload={payload} trashAction={trashAction} />
+    <TrashPanel payload={payload} trashAction={trashAction} reload={reload} notify={setNotice} />
     {administrator && <><div className="settings-section-head"><span>Бібліотеки</span><h2>Учасники порталу та відповідальні</h2><p>Записи цієї бібліотеки використовуються в усіх полях ініціатора, виконавця, приймання та ескалації.</p></div><UserLibraryEditor payload={payload} reload={reload} setNotice={setNotice} /><div className="settings-layout settings-bottom"><section className="panel"><div className="panel-head"><div><span>Розвиток</span><h2>Повторювані напрями зусиль</h2></div><span className="planned-label">Архітектуру закладено</span></div><p className="panel-copy">Кожна ціль, напрям зусиль, проект або завдання має правило повторення, інтервал і наступну дату. Автоматичне створення екземплярів буде ввімкнено після першого реального повторюваного напряму зусиль.</p><div className="future-box"><strong>Майбутній сценарій</strong><span>Шаблон → дата запуску → новий екземпляр → зв’язок із попереднім періодом → окрема звітність.</span></div></section><section className="panel"><div className="panel-head"><div><span>Довідники наступної черги</span><h2>Кероване розширення</h2></div></div><div className="library-roadmap"><span>Ролі та повноваження</span><span>Типи результатів</span><span>Причини блокерів</span><span>Шаблони координації</span><span>Джерела даних</span></div></section></div><section className="panel audit-panel"><div className="panel-head"><div><span>Контроль</span><h2>Журнал змін</h2></div><span>{payload.audit.length} записів</span></div><div className="audit-list">{payload.audit.slice(0, 30).map((entry) => <div key={entry.id}><time>{new Date(entry.at).toLocaleString("uk-UA")}</time><strong>{entry.action}</strong><span>{entry.by}</span><code>{entry.entityId}</code></div>)}</div></section></>}
   </>;
 }
 
-function TrashPanel({ payload, trashAction }: { payload: PortalPayload; trashAction: TrashAction }) {
+function TrashPanel({ payload, trashAction, reload, notify }: { payload: PortalPayload; trashAction: TrashAction; reload: () => Promise<PortalPayload>; notify: Notify }) {
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState("");
   const nodes = payload.trashNodes || [];
+  const administrator = ["owner", "admin"].includes(payload.currentUser.role);
   const roots = nodes.filter((node) => node.deletedBatchId === node.id && mayManageTrash(payload.currentUser, node));
   if (!roots.length && !["owner", "admin", "goal_owner", "cycle_owner"].includes(payload.currentUser.role)) return null;
+  const purge = async (root?: WorkNode) => {
+    const confirmation = window.prompt(root
+      ? `Остаточно видалити «${root.code} · ${root.title}» та всі видалені дочірні картки? Звіти, коментарі та історію не можна буде відновити через портал. Задачі Asana не видаляються. Для підтвердження введіть ${root.code}:`
+      : `Остаточно видалити всі ${nodes.length} карток у Кошику? Це незворотно в порталі. Задачі Asana не видаляються. Для підтвердження введіть ВИДАЛИТИ ВСЕ:`);
+    if (confirmation === null) return;
+    if (confirmation !== (root?.code || "ВИДАЛИТИ ВСЕ")) { notify("Підтвердження не збігається. Нічого не видалено.", "error"); return; }
+    setBusy(root?.id || "all");
+    try {
+      const response = await fetch("/api/trash", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: root ? "purge" : "empty", nodeId: root?.id, confirmation, expectedRevision: payload.revision }) });
+      const result = await response.json() as { error?: string; count?: number };
+      if (!response.ok) {
+        if (response.status === 409) await reload();
+        throw new Error(result.error || "Не вдалося очистити кошик");
+      }
+      await reload();
+      notify(`Остаточно видалено ${result.count || 0} карток з Кошика. Задачі Asana залишилися без змін.`);
+    } catch (cause) { notify(cause instanceof Error ? cause.message : "Не вдалося очистити кошик", "error"); }
+    finally { setBusy(""); }
+  };
   const visible = roots.filter((root) => nodes.filter((node) => node.deletedBatchId === root.id).some((node) => `${node.code} ${node.title}`.toLocaleLowerCase("uk").includes(query.toLocaleLowerCase("uk"))));
   return <details className="panel trash-panel">
     <summary><span>Кошик</span><b>{roots.length} гілок · {roots.reduce((sum, root) => sum + nodes.filter((node) => node.deletedBatchId === root.id).length, 0)} карток</b></summary>
     <div className="trash-content">
-      <p>Видалені картки не відображаються в роботі, дереві й координації. Звіти, коментарі та історія збережені. Відновлення повертає всю видалену гілку, включно з її попереднім станом архіву. Задачі Asana залишаються без змін.</p>
+      <p>Видалені картки не відображаються в роботі, дереві й координації. Поки картка в Кошику, її звіти, коментарі та історія збережені. Остаточне видалення прибирає ці дані з порталу й звільняє номер; задачі Asana залишаються без змін.</p>
       {roots.length > 0 && <input aria-label="Пошук у кошику" placeholder="Код або назва видаленої картки…" value={query} onChange={(event) => setQuery(event.target.value)} />}
+      {administrator && nodes.length > 0 && <div className="trash-toolbar"><span>Очищення стосується всього Кошика, незалежно від пошуку.</span><button className="trash-purge-action" disabled={Boolean(busy)} onClick={() => void purge()}>{busy === "all" ? "Очищуємо…" : `Очистити весь кошик (${nodes.length})`}</button></div>}
       {!visible.length && <p className="empty-state">{roots.length ? "Нічого не знайдено." : "Кошик порожній."}</p>}
       <div className="trash-list">{visible.sort(compareNodeCodes).map((root) => {
-        const branch = nodes.filter((node) => node.deletedBatchId === root.id).sort(compareNodeCodes);
+        const branch = branchNodes(nodes, root.id).sort(compareNodeCodes);
         const parentRemoved = nodes.some((node) => node.id === root.parentId);
-        const allowed = branch.every((node) => mayManageTrash(payload.currentUser, node));
+        const allowed = nodes.filter((node) => node.deletedBatchId === root.id).every((node) => mayManageTrash(payload.currentUser, node));
         return <article key={root.id}>
           <div><strong>{root.code} · {root.title}</strong><span>{kindLabels[root.kind]} · {branch.length} карток</span><small>Видалив {payload.users.find((user) => user.id === root.deletedById)?.name || "користувач"} · {new Date(root.deletedAt!).toLocaleString("uk-UA")}</small></div>
-          <button className="secondary restore-action" disabled={Boolean(busy) || parentRemoved || !allowed} title={parentRemoved ? "Спочатку відновіть батьківську картку" : !allowed ? "Потрібні права на всю гілку" : undefined} onClick={async () => { setBusy(root.id); try { await trashAction(root, "restore"); } finally { setBusy(""); } }}>{busy === root.id ? "Відновлюємо…" : "Відновити"}</button>
+          <div className="trash-actions"><button className="secondary restore-action" disabled={Boolean(busy) || parentRemoved || !allowed} title={parentRemoved ? "Спочатку відновіть батьківську картку" : !allowed ? "Потрібні права на всю гілку" : undefined} onClick={async () => { setBusy(root.id); try { await trashAction(root, "restore"); } finally { setBusy(""); } }}>{busy === root.id ? "Відновлюємо…" : "Відновити"}</button>{administrator && <button className="trash-purge-action" disabled={Boolean(busy)} onClick={() => void purge(root)}>{busy === root.id ? "Видаляємо…" : "Видалити назавжди"}</button>}</div>
           {parentRemoved && <small className="trash-hint">Спочатку відновіть батьківську картку.</small>}
-          {branch.length > 1 && <details className="trash-branch"><summary>Склад гілки · {branch.length}</summary><ul>{branch.map((node) => <li key={node.id}>{node.code} · {node.title}</li>)}</ul></details>}
+          {branch.length > 1 && <details className="trash-branch"><summary>Склад гілки · {branch.length}</summary><ul>{branch.map((node) => <li key={node.id}><span>{node.code} · {node.title}</span>{administrator && node.id !== root.id && <button className="trash-purge-action" disabled={Boolean(busy)} onClick={() => void purge(node)} aria-label={`Видалити назавжди ${node.code} · ${node.title}`}>Видалити назавжди</button>}</li>)}</ul></details>}
         </article>;
       })}</div>
     </div>
