@@ -3,6 +3,7 @@ import { notifyTelegramUsers } from "../../lib/telegram";
 import { approvalChangeError, isDerivedHierarchyChange, routePendingRequests } from "../../lib/responsibility";
 import { nodeAuditChanges } from "../../lib/node-audit";
 import { flushAsanaOutbox } from "../../lib/asana-outbox";
+import { primaryAsanaRenameNeeded, primaryAsanaTitle } from "../../lib/asana-integration";
 import { trashFields } from "../../lib/trash";
 import { portalHref } from "../../lib/portal-routes";
 import { reportingLinkError } from "../../lib/reporting-links";
@@ -333,6 +334,16 @@ export async function POST(request: Request) {
           .bind(report.id, node.id, node.asana.taskGid, user.id, "", "report", JSON.stringify(report), report.createdAt));
       }
     }
+    // A passport edit changes only its linked primary task. A read/import from
+    // Asana or a change to an additional control-place link must not echo back.
+    if (body.action?.startsWith("Оновлено ") && body.entityId) {
+      const after = next.nodes.find((node) => node.id === body.entityId);
+      const before = current.nodes.find((node) => node.id === body.entityId);
+      if (after && primaryAsanaRenameNeeded(before, after)) {
+        outbound.push(db.prepare("INSERT INTO asana_outbox (event_id, node_id, task_gid, author_id, recipient_id, kind, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+          .bind(crypto.randomUUID(), after.id, after.asana.taskGid, user.id, "", "rename", JSON.stringify({ name: primaryAsanaTitle(after) }), now));
+      }
+    }
     queuedAsanaEvents = outbound.length;
     const results = await db.batch([stateStatement, ...versions, ...outbound]);
     if (!results[0].meta.changes) return jsonError("Конфлікт одночасного редагування", 409);
@@ -366,5 +377,8 @@ export async function POST(request: Request) {
     }
   }
 
-  return Response.json({ ...stateForUser(next, user), currentUser: user, storage, asanaDelivery, authConfigured: Boolean(runtimeEnv().PORTAL_OWNER_CREDENTIAL || runtimeEnv().GOOGLE_CLIENT_ID) });
+  // The Asana delivery may update the cached remote title in a second guarded
+  // revision; return that revision so the editor never receives stale state.
+  const savedState = asanaDelivery?.sent ? (await loadState()).state : next;
+  return Response.json({ ...stateForUser(savedState, user), currentUser: user, storage, asanaDelivery, authConfigured: Boolean(runtimeEnv().PORTAL_OWNER_CREDENTIAL || runtimeEnv().GOOGLE_CLIENT_ID) });
 }

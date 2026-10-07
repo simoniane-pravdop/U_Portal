@@ -1,5 +1,5 @@
 import { asanaRequest } from "./asana";
-import { portalMessageForAsana, portalOriginId, portalReportForAsana } from "./asana-integration";
+import { portalMessageForAsana, portalOriginId, portalReportForAsana, primaryAsanaTitle } from "./asana-integration";
 import { baseUrl, database, loadState } from "./server";
 import { portalHref } from "./portal-routes";
 import type { DiscussionMessage, WorkUpdate } from "../types";
@@ -24,11 +24,31 @@ async function existingStoryIds(userId: string, taskGid: string) {
   return ids;
 }
 
+async function rememberRenamedTask(nodeId: string, taskGid: string, name: string) {
+  const db = await database();
+  if (!db) return;
+  const now = new Date().toISOString();
+  await db.prepare("INSERT INTO asana_task_titles (task_gid, name, updated_at) VALUES (?, ?, ?) ON CONFLICT(task_gid) DO UPDATE SET name = excluded.name, updated_at = excluded.updated_at")
+    .bind(taskGid, name, now).run();
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const { state } = await loadState();
+    const node = state.nodes.find((item) => item.id === nodeId);
+    if (!node || node.deletedAt || node.asana.taskGid !== taskGid || primaryAsanaTitle(node) !== name || node.asana.remoteName === name) return;
+    const revision = state.revision;
+    node.asana.remoteName = name;
+    state.revision += 1;
+    const saved = await db.prepare("UPDATE portal_state SET payload = ?, revision = ?, updated_at = ?, updated_by = ? WHERE id = ? AND revision = ?")
+      .bind(JSON.stringify(state), state.revision, now, "Asana", "main", revision).run();
+    if (saved.meta.changes === 1) return;
+  }
+  throw new Error("Назву в Asana змінено, але портал одночасно оновив інший користувач. Повторіть синхронізацію назви.");
+}
+
 /** Deliver only events authored by the connected portal user, so Asana attribution stays truthful. */
 export async function flushAsanaOutbox(request: Request, authorId: string, nodeId?: string) {
   const db = await database();
   if (!db) return { sent: 0, pending: 0, errors: [] as string[] };
-  const rows = await db.prepare(`SELECT event_id, node_id, task_gid, author_id, recipient_id, kind, payload FROM asana_outbox WHERE author_id = ? AND status = 'pending' ${nodeId ? "AND node_id = ?" : ""} ORDER BY created_at LIMIT 3`)
+  const rows = await db.prepare(`SELECT event_id, node_id, task_gid, author_id, recipient_id, kind, payload FROM asana_outbox WHERE author_id = ? AND status = 'pending' ${nodeId ? "AND node_id = ?" : ""} ORDER BY CASE WHEN kind = 'rename' THEN 0 ELSE 1 END, CASE WHEN kind = 'rename' THEN created_at END DESC, created_at ASC LIMIT 3`)
     .bind(...(nodeId ? [authorId, nodeId] : [authorId])).all<OutboxRow>();
   const { state } = await loadState();
   const errors: string[] = [];
@@ -44,6 +64,24 @@ export async function flushAsanaOutbox(request: Request, authorId: string, nodeI
       continue;
     }
     try {
+      if (row.kind === "rename") {
+        const requestedName = (JSON.parse(row.payload) as { name?: string }).name || "";
+        // A later portal edit supersedes an older queued name; never roll it back.
+        if (primaryAsanaTitle(node) !== requestedName) {
+          await db.prepare("UPDATE asana_outbox SET status = 'cancelled', last_error = ? WHERE event_id = ?")
+            .bind("Назву картки змінено повторно", row.event_id).run();
+          continue;
+        }
+        const result = await asanaRequest(authorId, `/tasks/${encodeURIComponent(row.task_gid)}?opt_fields=gid,name`, {
+          method: "PUT", body: JSON.stringify({ data: { name: requestedName } }),
+        }) as { data?: { name?: string } };
+        if (result.data?.name && result.data.name !== requestedName) throw new Error("Asana повернула іншу назву задачі");
+        await rememberRenamedTask(node.id, row.task_gid, requestedName);
+        await db.prepare("UPDATE asana_outbox SET status = 'sent', sent_at = ?, last_error = '' WHERE event_id = ?")
+          .bind(new Date().toISOString(), row.event_id).run();
+        sent += 1;
+        continue;
+      }
       if (!storyCache.has(row.task_gid)) storyCache.set(row.task_gid, await existingStoryIds(authorId, row.task_gid));
       const known = storyCache.get(row.task_gid)!;
       let storyGid = known.get(row.event_id) || "";

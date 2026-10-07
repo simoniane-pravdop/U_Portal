@@ -7,6 +7,19 @@ export function primaryAsanaTitle(node: Pick<WorkNode, "code" | "title">) {
   return `${node.code.trim()} ${node.title.trim()}`.trim();
 }
 
+/** A task named by the portal includes its code; do not import that code into the card title. */
+export function portalTitleFromAsanaName(node: Pick<WorkNode, "code">, name: string) {
+  const prefix = `${node.code.trim()} `;
+  return name.startsWith(prefix) ? name.slice(prefix.length).trim() : name.trim();
+}
+
+/** Only an unchanged primary link may receive a title edited in the portal. */
+export function primaryAsanaRenameNeeded(before: WorkNode | undefined, after: WorkNode) {
+  return Boolean(before && !before.deletedAt && !after.deletedAt && after.kind !== "goal"
+    && before.asana?.taskGid && before.asana.taskGid === after.asana?.taskGid
+    && primaryAsanaTitle(before) !== primaryAsanaTitle(after));
+}
+
 // Asana's due date follows the current portal forecast. The agreed deadline is
 // only a fallback until a forecast has been entered.
 export function asanaDueDate(node: Pick<WorkNode, "forecastEnd" | "plannedEnd">) {

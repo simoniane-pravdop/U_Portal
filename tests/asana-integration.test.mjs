@@ -6,7 +6,7 @@ import ts from "typescript";
 const noImports = (source) => source.replace(/^import .*;\n/gm, "");
 const source = ["app/lib/asana-links.ts", "app/lib/asana-integration.ts"].map(async (path) => noImports(await readFile(new URL(`../${path}`, import.meta.url), "utf8")));
 const compiled = ts.transpileModule((await Promise.all(source)).join("\n"), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-const { ASANA_MANAGEMENT_TAG, asanaDueDate, primaryAsanaTitle, asanaTitleDiffers, portalMessageForAsana, portalReportForAsana, portalOriginId, portalTaskDescriptionForAsana } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`);
+const { ASANA_MANAGEMENT_TAG, asanaDueDate, primaryAsanaTitle, primaryAsanaRenameNeeded, portalTitleFromAsanaName, asanaTitleDiffers, portalMessageForAsana, portalReportForAsana, portalOriginId, portalTaskDescriptionForAsana } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`);
 
 test("Asana due date follows the portal forecast, falling back to the planned deadline", () => {
   assert.equal(asanaDueDate({ forecastEnd: "2026-10-08", plannedEnd: "2026-10-02" }), "2026-10-08");
@@ -20,6 +20,18 @@ test("a primary Asana task uses the management code and title", () => {
   assert.equal(asanaTitleDiffers(node, "P1.1.1 Контроль публікацій"), false);
   assert.equal(asanaTitleDiffers(node, "Контроль публікацій"), true);
   assert.equal(ASANA_MANAGEMENT_TAG, "Управлінський_цикл");
+  assert.equal(portalTitleFromAsanaName(node, "P1.1.1 Контроль публікацій"), "Контроль публікацій");
+  assert.equal(portalTitleFromAsanaName(node, "Інша назва"), "Інша назва");
+});
+
+test("only a renamed card with the same primary Asana task needs an automatic rename", () => {
+  const before = { kind: "task", code: "P1.1.1", title: "Стара назва", asana: { taskGid: "123456789" } };
+  assert.equal(primaryAsanaRenameNeeded(before, { ...before, title: "Нова назва" }), true);
+  assert.equal(primaryAsanaRenameNeeded(before, { ...before, code: "P1.1.2" }), true);
+  assert.equal(primaryAsanaRenameNeeded(before, { ...before, title: "Стара назва" }), false);
+  assert.equal(primaryAsanaRenameNeeded(before, { ...before, asana: { taskGid: "987654321" } }), false);
+  assert.equal(primaryAsanaRenameNeeded(before, { ...before, deletedAt: "2026-10-07" }), false);
+  assert.equal(primaryAsanaRenameNeeded({ ...before, kind: "goal" }, { ...before, kind: "goal", title: "Нова назва" }), false);
 });
 
 test("an action is escaped and contains a real Asana mention and portal link", () => {
