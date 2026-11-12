@@ -51,6 +51,24 @@ test("a portal report carries an origin marker to prevent an import loop", () =>
   assert.equal(portalOriginId(html), id);
 });
 
+test("comments and reports use only Asana story tags and preserve readable lines, mentions and links", () => {
+  const id = "e3497993-488f-4dbb-8425-92a4f50bb57e";
+  const url = "https://up.automatizer.online/moia-robota?node=card&focus=acceptance";
+  const text = "Перший рядок\r\nДругий <рядок> & результат\rТретій рядок";
+  const comment = portalMessageForAsana({ id, kind: "approval", text }, "Едгар", url, "50917914776850");
+  const report = portalReportForAsana({ id, summary: text, nextAction: "Погодити\nПеревірити" }, "Едгар", url);
+  for (const html of [comment, report]) {
+    assert.match(html, /^<body>[\s\S]*<\/body>$/);
+    assert.doesNotMatch(html, /<br\b|\r/i);
+    assert.match(html, /Перший рядок\nДругий &lt;рядок&gt; &amp; результат\nТретій рядок/);
+    assert.match(html, /href="https:\/\/up\.automatizer\.online\/moia-robota\?node=card&amp;focus=acceptance"/);
+    assert.equal(portalOriginId(html), id);
+    for (const tag of html.matchAll(/<\/?([a-z]+)\b/g)) assert.ok(["body", "strong", "a", "em"].includes(tag[1]));
+  }
+  assert.match(comment, /<a data-asana-gid="50917914776850"\/>/);
+  assert.match(report, /Наступна дія: Погодити\nПеревірити/);
+});
+
 const node = (id, kind, parentId, extra = {}) => ({ id, kind, parentId, code: id, title: `Назва ${id}`, controlPlace: "", result: "Готовий результат", acceptanceCriteria: "Погоджено", asana: { taskGid: "", taskUrl: "" }, ...extra });
 const structureFixture = () => [
   node("S1", "goal", null, { asana: { taskGid: "123456789", taskUrl: "https://app.asana.com/0/12345678/123456789" } }),

@@ -89,11 +89,12 @@ export function portalTaskDescriptionForAsana(nodes: WorkNode[], node: WorkNode,
 export function portalMessageForAsana(message: DiscussionMessage, authorName: string, actionUrl: string, recipientGid?: string) {
   const category = message.kind === "question" ? "Питання" : message.kind === "issue" ? "Перешкода" : message.kind === "decision" ? "Рішення" : message.kind === "approval" ? "Погодження" : "Коментар";
   const mention = recipientGid ? `<a data-asana-gid="${escapeAsanaHtml(recipientGid)}"/> ` : "";
-  return `<body>${mention}<strong>${category} · ${escapeAsanaHtml(authorName)}</strong><br/>${escapeAsanaHtml(message.text).replace(/\n/g, "<br/>")}<br/><a href="${escapeAsanaHtml(actionUrl)}">Відкрити дію в порталі</a><br/><em>УП:${escapeAsanaHtml(message.id)}</em></body>`;
+  // Asana stories use literal newlines. <br/> is not a supported rich-text tag.
+  return `<body>${mention}<strong>${category} · ${escapeAsanaHtml(authorName)}</strong>\n${escapeAsanaHtml(message.text).replace(/\r\n?/g, "\n")}\n<a href="${escapeAsanaHtml(actionUrl)}">Відкрити дію в порталі</a>\n<em>УП:${escapeAsanaHtml(message.id)}</em></body>`;
 }
 
 export function portalReportForAsana(report: WorkUpdate, authorName: string, actionUrl: string) {
-  return `<body><strong>Звіт · ${escapeAsanaHtml(authorName)}</strong><br/>${escapeAsanaHtml(report.summary).replace(/\n/g, "<br/>")}${report.nextAction ? `<br/>Наступна дія: ${escapeAsanaHtml(report.nextAction).replace(/\n/g, "<br/>")}` : ""}<br/><a href="${escapeAsanaHtml(actionUrl)}">Відкрити звіт у порталі</a><br/><em>УП:${escapeAsanaHtml(report.id)}</em></body>`;
+  return `<body><strong>Звіт · ${escapeAsanaHtml(authorName)}</strong>\n${escapeAsanaHtml(report.summary).replace(/\r\n?/g, "\n")}${report.nextAction ? `\nНаступна дія: ${escapeAsanaHtml(report.nextAction).replace(/\r\n?/g, "\n")}` : ""}\n<a href="${escapeAsanaHtml(actionUrl)}">Відкрити звіт у порталі</a>\n<em>УП:${escapeAsanaHtml(report.id)}</em></body>`;
 }
 
 export function portalOriginId(text: string) {
