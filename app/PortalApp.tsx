@@ -1376,6 +1376,34 @@ function NotificationsView({ payload, userById, mutate, openNode }: { payload: P
 }
 
 function MyWork({ payload, selected, selectedId, setSelectedId, initialFilter, focusTarget, userById, canManage, saveWorkUpdate, resolveAcceptance, completeNode, openEdit, openDuplicate, copyNodeLink, trashAction, setModal, asanaStatus, mutate, setNotice, openTree }: { payload: PortalPayload; selected?: WorkNode; selectedId: string; setSelectedId: (id: string) => void; initialFilter: WorkFilter; focusTarget: WorkFocus; userById: (id: string) => PortalUser | undefined; canManage: boolean; saveWorkUpdate: (node: WorkNode, update: Omit<WorkUpdate, "id" | "createdAt" | "createdBy" | "source">) => Promise<boolean>; resolveAcceptance: (acceptance: Acceptance, accepted: boolean, feedback?: string) => Promise<boolean>; completeNode: (node: WorkNode) => Promise<boolean>; openEdit: (node: WorkNode) => Promise<void>; openDuplicate: (node: WorkNode) => void; copyNodeLink: (node: WorkNode, targetView: View) => Promise<void>; trashAction: TrashAction; setModal: (modal: Modal) => void; asanaStatus: { configured: boolean; connected: boolean; connection?: Record<string, string> } | null; mutate: (action: string, entityId: string, recipe: (state: PortalState) => void) => Promise<boolean>; setNotice: Notify; openTree: (id: string) => void }) {
+  const listWidthKey = "portal:my-work-list-width";
+  const [listWidth, setListWidth] = useState<number | null>(() => {
+    try {
+      const saved = Number(window.localStorage.getItem(listWidthKey));
+      return saved >= 210 && saved <= 560 ? saved : null;
+    } catch { return null; }
+  });
+  const workListRef = useRef<HTMLElement>(null);
+  const resizeDrag = useRef<{ pointerId: number; startX: number; startWidth: number; latestWidth: number; initialPreference: number | null; direction: number } | null>(null);
+  const saveListWidth = (width: number | null) => {
+    setListWidth(width);
+    try {
+      if (width === null) window.localStorage.removeItem(listWidthKey);
+      else window.localStorage.setItem(listWidthKey, String(width));
+    } catch { /* Keep the width for this visit when storage is unavailable. */ }
+  };
+  const clampListWidth = (width: number) => {
+    const total = workListRef.current?.parentElement?.clientWidth || 0;
+    const max = Math.min(560, total * .55, Math.max(210, total - 344));
+    return Math.round(Math.max(210, Math.min(max, width)));
+  };
+  const finishResize = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const drag = resizeDrag.current;
+    if (drag?.pointerId !== event.pointerId) return;
+    resizeDrag.current = null;
+    if (drag.latestWidth !== drag.startWidth) saveListWidth(drag.latestWidth);
+    else setListWidth(drag.initialPreference);
+  };
   const [filter, setFilter] = useState<WorkFilter>(initialFilter);
   const [listQuery, setListQuery] = useState("");
   const [sort, setSort] = useState<"code" | "deadline" | "priority" | "updated" | "progress">("code");
@@ -1429,13 +1457,38 @@ function MyWork({ payload, selected, selectedId, setSelectedId, initialFilter, f
   });
 
   return <>
-    <div className="my-workbench">
-      <aside className="work-inbox">
+    <div className="my-workbench" style={listWidth === null ? undefined : { "--work-list-width": `${listWidth}px` } as React.CSSProperties}>
+      <aside className="work-inbox" ref={workListRef}>
         <div className="work-filter">{(["action", "acceptance", "all"] as const).map((item) => <button key={item} className={filter === item ? "active" : ""} onClick={() => setFilter(item)}>{item === "action" ? "Мої дії" : item === "acceptance" ? "Приймаю" : "Усі"}</button>)}</div>
         <div className="work-list-controls"><input value={listQuery} onChange={(event) => setListQuery(event.target.value)} placeholder="Пошук…" /><select value={sort} onChange={(event) => setSort(event.target.value as typeof sort)}><option value="code">За номером</option><option value="deadline">За строком</option><option value="priority">За пріоритетом</option><option value="updated">За оновленням</option><option value="progress">За прогресом</option></select></div>
         <details className="work-advanced-filters"><summary><span>Рівень, статус і стан</span>{activeFilterCount > 0 && <b>{activeFilterCount}</b>}<i>⌄</i></summary><div><label><span>Рівень</span><select value={levelFilter} onChange={(event) => setLevelFilter(event.target.value as typeof levelFilter)}><option value="all">Усі рівні</option><option value="goal">Цілі</option><option value="cycle">Напрями зусиль</option><option value="subcycle">Проекти</option><option value="task">Завдання</option></select></label><label><span>Статус</span><select value={lifecycleFilter} onChange={(event) => setLifecycleFilter(event.target.value as typeof lifecycleFilter)}><option value="all">Усі статуси</option>{Object.entries(lifecycleLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label><span>Стан</span><select value={workHealthFilter} onChange={(event) => setWorkHealthFilter(event.target.value as typeof workHealthFilter)}><option value="all">Будь-який стан</option><option value="branch_blocker">Блокери</option><option value="no_report_5d">Немає звіту понад 5 днів</option><option value="normal">Нормально</option><option value="risk">Є ризик</option><option value="blocked">Заблоковано</option></select></label><label><span>Пріоритет</span><select value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value as typeof priorityFilter)}><option value="all">Усі пріоритети</option><option value="critical">Критичний</option><option value="high">Високий</option><option value="normal">Нормальний</option><option value="low">Низький</option></select></label><button type="button" disabled={!activeFilterCount} onClick={resetListFilters}>Скинути фільтри</button></div></details>
         <div className="work-inbox-list">{filtered.map((node) => <a className={`work-list-row kind-${node.kind} ${node.id === current?.id ? "selected" : ""}`} key={node.id} href={portalHref("my", node.id)} onClick={(event) => { if (!ordinaryLinkClick(event)) return; event.preventDefault(); setSelectedId(node.id); }}><div><span>{kindLabels[node.kind]} · {node.code}</span><strong>{node.title}</strong></div><StatusBadge node={node} /><footer><small>{node.progress}%</small><time>{dateLabel(node.plannedEnd)}</time></footer></a>)}{!filtered.length && <p className="empty-state padded">За вибраними фільтрами карток немає.</p>}</div>
       </aside>
+      <button type="button" className="work-width-handle" aria-label="Змінити ширину списку карток" title="Перетягніть або скористайтеся стрілками. Подвійне натискання або Enter повертає стандартну ширину."
+        onPointerDown={(event) => {
+          if (event.button !== 0 || !workListRef.current || resizeDrag.current) return;
+          const startWidth = workListRef.current.offsetWidth;
+          const direction = getComputedStyle(event.currentTarget).direction === "rtl" ? -1 : 1;
+          resizeDrag.current = { pointerId: event.pointerId, startX: event.clientX, startWidth, latestWidth: startWidth, initialPreference: listWidth, direction };
+          event.currentTarget.setPointerCapture(event.pointerId);
+        }}
+        onPointerMove={(event) => {
+          const drag = resizeDrag.current;
+          if (drag?.pointerId !== event.pointerId) return;
+          const width = clampListWidth(drag.startWidth + (event.clientX - drag.startX) * drag.direction);
+          if (width === drag.latestWidth) return;
+          drag.latestWidth = width;
+          setListWidth(width);
+        }}
+        onPointerUp={finishResize} onPointerCancel={finishResize} onLostPointerCapture={finishResize}
+        onDoubleClick={() => saveListWidth(null)} onClick={(event) => { if (event.detail === 0) saveListWidth(null); }}
+        onKeyDown={(event) => {
+          if (!workListRef.current || !["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+          event.preventDefault();
+          const direction = getComputedStyle(event.currentTarget).direction === "rtl" ? -1 : 1;
+          const step = event.key === "ArrowRight" ? 20 : -20;
+          saveListWidth(clampListWidth(workListRef.current.offsetWidth + step * direction));
+        }} />
       {current ? <section className="work-desk"><header className="work-desk-head"><div><span>{kindLabels[current.kind]} · {current.code}</span><h2>{current.title}</h2><p>{current.result}</p></div><div className="work-desk-actions"><ProgressRing value={current.progress} />{!["acceptance", "completed"].includes(current.lifecycle) && mayWork && <button className="positive primary-completion" disabled={Boolean(completionReason)} title={completionReason || "Передати результат на приймання"} onClick={() => void completeNode(current)}>Завершити</button>}<CardActionsMenu key={current.id}>{mayEditCard && <button onClick={() => { void openEdit(current); }}>Редагувати картку</button>}{canManage && <button onClick={() => openDuplicate(current)}>Дублювати картку</button>}<button onClick={() => { void copyNodeLink(current, "my"); }}>Копіювати посилання</button>{["task", "subcycle", "cycle"].includes(current.kind) && <button onClick={() => { scrollToSection(`asana-link-${current.id}`); }}>Перейти до Asana</button>}<button onClick={() => { openTree(current.id); }}>Паспорт у дереві</button>{mayManageTrash(payload.currentUser, current) && <button className="delete" onClick={() => { void trashAction(current, "delete"); }}>Видалити</button>}</CardActionsMenu></div></header><div className="status-line"><StatusBadge node={current} />{current.decisionRequired && <span className="decision-badge">Потрібне рішення</span>}<span>Строк {dateLabel(current.plannedEnd)}</span><span>Прогноз {dateLabel(current.forecastEnd)}</span><CreationNote node={current} payload={payload} />{completionReason && <span className="completion-hint">{completionReason}</span>}</div><nav className="work-card-sections" aria-label="Розділи робочої картки"><button onClick={() => scrollToSection(`card-description-${current.id}`)}>Опис</button>{current.kind === "task" && <><button onClick={() => scrollToSection(`work-status-${current.id}`)}>Стан і звіт</button><button onClick={() => scrollToSection(`evidence-${current.id}`)}>Докази</button></>}{["task", "subcycle", "cycle"].includes(current.kind) && <button onClick={() => scrollToSection(`asana-link-${current.id}`)}>Asana</button>}{current.kind === "task" && <button onClick={() => scrollToSection(`work-history-${current.id}`)}>Історія</button>}<button onClick={() => scrollToSection(`discussion-${current.id}`)}>Комунікація</button><button onClick={() => scrollToSection(`work-audit-${current.id}`)}>Журнал змін</button></nav>
         <div className="work-summary-grid"><article><span>Виконавець</span><div className="person-line"><UserAvatar user={userById(current.assigneeId)} compact /><strong>{userById(current.assigneeId)?.name}</strong></div></article><article><span>Ініціатор</span><div className="person-line"><UserAvatar user={userById(current.acceptorId)} compact /><strong>{userById(current.acceptorId)?.name}</strong></div></article></div>
         <WorkCardDescription node={current} payload={payload} userById={userById} view="my" />
