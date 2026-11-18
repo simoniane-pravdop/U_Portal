@@ -2,10 +2,13 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import ts from "typescript";
+import * as React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import * as jsxRuntime from "react/jsx-runtime";
 
 async function load(relativePath, modules = {}) {
   const source = await readFile(new URL(relativePath, import.meta.url), "utf8");
-  const output = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const output = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
   const runtimeModule = { exports: {} };
   new Function("require", "module", "exports", output)((id) => modules[id], runtimeModule, runtimeModule.exports);
   return runtimeModule.exports;
@@ -41,6 +44,50 @@ test("project results aggregate all reports of descendant active tasks", async (
     { id: "other", code: "P2.1", kind: "task", parentId: "other-project", updates: [report("2026-09-04", "Чуже")] },
   ];
   assert.deepEqual(projectTaskResults(nodes, "p").map(({ task, report }) => [task.code, report.summary]), [["P1.2", "Нове"], ["P1.1", "Готово"], ["P1.2", "Старе"]]);
+});
+
+test("Asana audit describes the task and individual changes without JSON or timestamp noise", async () => {
+  const { nodeAuditChanges, auditChangesForDisplay } = await load("../app/lib/node-audit.ts");
+  const before = { taskGid: "", taskUrl: "", remoteName: "", syncState: "not_linked", rules: { title: "portal" }, lastSyncedAt: null };
+  const after = { ...before, taskGid: "1220422707974333", taskUrl: "https://app.asana.com/1/50916733923098/project/1215891119922432/task/1220422707974333", remoteName: "P13.1 Нові послуги в Медичному напрямку (Сімонян)", syncState: "linked", lastSyncedAt: "2026-11-11T11:00:55.510Z" };
+  const changes = nodeAuditChanges({ asana: before }, { asana: after });
+  assert.deepEqual(changes.map(({ field }) => field), ["asana.task", "asana.syncState"]);
+  assert.equal(changes[0].from, "Не прив’язано");
+  assert.equal(changes[0].to, after.remoteName);
+  assert.equal(changes[0].toHref, after.taskUrl);
+  assert.equal(changes[1].to, "Прив’язано");
+  assert.deepEqual(nodeAuditChanges({ asana: after }, { asana: { ...after, lastSyncedAt: "later" } }), []);
+  const legacy = [{ field: "asana", label: "Asana", from: JSON.stringify(before), to: JSON.stringify(after) }];
+  const original = JSON.stringify(legacy);
+  assert.deepEqual(auditChangesForDisplay(legacy), changes);
+  assert.equal(JSON.stringify(legacy), original);
+  assert.deepEqual(auditChangesForDisplay(changes), changes);
+  const rules = nodeAuditChanges({ asana: after }, { asana: { ...after, remoteCompleted: true, rules: { title: "asana" } } });
+  assert.equal(rules.find(({ field }) => field === "asana.remoteCompleted").to, "Так");
+  assert.equal(rules.find(({ field }) => field === "asana.rules.title").to, "Asana");
+  assert.doesNotThrow(() => auditChangesForDisplay([{ field: "asana", from: "{broken", to: "{}" }]));
+  const unsafe = nodeAuditChanges({ asana: before }, { asana: { ...after, taskUrl: "javascript:alert(1)" } });
+  assert.equal(unsafe[0].toHref, "https://app.asana.com/0/0/1220422707974333");
+});
+
+test("the card renders historical Asana JSON as a named hyperlink and control-place URLs as links", async () => {
+  const { auditChangesForDisplay } = await load("../app/lib/node-audit.ts");
+  const links = await load("../app/lib/asana-links.ts");
+  const { LinkedText } = await load("../app/components/LinkedText.tsx", { react: React, "react/jsx-runtime": jsxRuntime, "../lib/asana-links": links });
+  const source = await readFile(new URL("../app/PortalApp.tsx", import.meta.url), "utf8");
+  const parsed = ts.createSourceFile("PortalApp.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const component = parsed.statements.find((statement) => ts.isFunctionDeclaration(statement) && statement.name?.text === "AuditEntryDetails");
+  const output = ts.transpileModule(component.getText(parsed), { compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const AuditEntryDetails = new Function("React", "auditChangesForDisplay", "LinkedText", `${output}\nreturn AuditEntryDetails;`)(React, auditChangesForDisplay, LinkedText);
+  const url = "https://app.asana.com/0/0/1220422707974333";
+  const html = renderToStaticMarkup(React.createElement(AuditEntryDetails, { entry: { action: "Прив’язано задачу", by: "Едгар", changes: [
+    { field: "controlPlace", label: "Контрольне місце", from: "Не вказано", to: `Asana · ${url}` },
+    { field: "asana", label: "Asana", from: "{}", to: JSON.stringify({ taskGid: "1220422707974333", taskUrl: url, remoteName: "P13.1 Медичний напрям" }) },
+  ] } }));
+  assert.match(html, /Основна задача Asana/);
+  assert.match(html, /<a href="https:\/\/app.asana.com\/0\/0\/1220422707974333" target="_blank" rel="noopener noreferrer">P13.1 Медичний напрям<\/a>/);
+  assert.equal((html.match(/href=/g) || []).length, 2);
+  assert.doesNotMatch(html, /taskGid|remoteName|&quot;/);
 });
 
 test("one task reports into additional projects and directions without duplicating a report", async () => {

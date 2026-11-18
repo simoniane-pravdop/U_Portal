@@ -18,6 +18,7 @@ import { generatePassword, mayResetPassword } from "./lib/user-password";
 import { branchNodes, mayManageTrash } from "./lib/trash";
 type TrashAction = (node: WorkNode, action: "delete" | "restore") => Promise<boolean>;
 import { LinkedText } from "./components/LinkedText";
+import { auditChangesForDisplay } from "./lib/node-audit";
 import { CardActionsMenu } from "./components/CardActionsMenu";
 import { IdeasView } from "./components/IdeasView";
 import { canonicalPortalUrl, portalHref, readPortalRoute, type PortalView, type PortalFocus } from "./lib/portal-routes";
@@ -1486,7 +1487,8 @@ function WorkUpdateHistory({ node, userById }: { node: WorkNode; userById: (id: 
 }
 
 function AuditEntryDetails({ entry }: { entry: AuditEntry }) {
-  return <><strong>{entry.action}</strong><small>{entry.by}</small>{Boolean(entry.changes?.length) && <div className="audit-changes">{entry.changes!.map((change) => <div key={change.field}><b>{change.label}</b><span><del>{change.from}</del><span aria-hidden="true">→</span><ins>{change.to}</ins></span></div>)}</div>}</>;
+  const changes = auditChangesForDisplay(entry.changes);
+  return <><strong>{entry.action}</strong><small>{entry.by}</small>{Boolean(changes.length) && <div className="audit-changes">{changes.map((change) => <div key={change.field}><b>{change.label}</b><span><del>{change.fromHref ? <a href={change.fromHref} target="_blank" rel="noopener noreferrer">{change.from}</a> : <LinkedText value={change.from} />}</del><span aria-hidden="true">→</span><ins>{change.toHref ? <a href={change.toHref} target="_blank" rel="noopener noreferrer">{change.to}</a> : <LinkedText value={change.to} />}</ins></span></div>)}</div>}</>;
 }
 
 function NodeAuditHistory({ node, audit }: { node: WorkNode; audit: AuditEntry[] }) {
