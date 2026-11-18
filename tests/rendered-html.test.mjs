@@ -312,7 +312,7 @@ test("management workflow separates structure, work, dashboard, settings, and ac
   assert.match(source, /Немає звіту понад 5 днів/);
   assert.match(source, /workHealthFilter === "branch_blocker" && branchHasOpenBlocker/);
   assert.match(source, /value="branch_blocker">Блокери/);
-  assert.match(source, /filtered\.some\(\(node\) => node\.id === selectedNode\.id\)/);
+  assert.match(source, /current = mine\.find\(\(node\) => node\.id === selectedId\) \|\| filtered\[0\]/);
   assert.match(source, /За вибраним фільтром карток немає/);
   assert.match(source, /item === "acceptance" \? "Приймаю"/);
   assert.doesNotMatch(source, /Власник результату|Приймає результат/);

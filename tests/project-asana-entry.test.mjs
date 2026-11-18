@@ -16,6 +16,7 @@ test("directions, projects and tasks expose hierarchical Asana creation", () => 
   assert.match(app, /selected\.kind !== "goal" && <button className="secondary" onClick=\{\(\) => openWork\(selected, "asana"\)\}>/);
   assert.match(app, /\["subcycle", "cycle"\]\.includes\(current\.kind\) && <AsanaSyncPanel/);
   assert.match(app, /asanaParentNode\(payload\.nodes, selected\)/);
-  assert.match(app, /focusTarget === "asana" \? `asana-link-\$\{current\.id\}`/);
+  assert.match(app, /focusTarget === "asana" \? "asana-link"/);
+  assert.match(app, /getElementById\(`\$\{prefix\}-\$\{currentId\}`\)/);
   assert.match(app, /node\.kind === "task" && node\.asana\.rules\.status === "asana"/);
 });
